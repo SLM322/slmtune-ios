@@ -12,8 +12,21 @@ enum AppGroup {
         #if os(iOS) || os(macOS)
         if let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: id) { return url }
         #endif
-        // No App Group (unsigned simulator build): fall back to the app's own folder.
-        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        // No App Group (unsigned simulator build, or re-signed with a profile without our group — e.g. a bought
+        // "signing" certificate with a wildcard App ID): fall back to the process's own folder.
+        let u = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
+        return u
+    }
+
+    /// Whether the app and the extension really share a folder. When not, settings travel inside the VPN profile
+    /// (providerConfiguration) and with the reload message — see VPNController and PacketTunnelProvider.
+    static var isShared: Bool {
+        #if os(iOS) || os(macOS)
+        return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: id) != nil
+        #else
+        return false
+        #endif
     }
 
     static var settingsFile: URL { container.appendingPathComponent("settings.json") }
@@ -49,6 +62,13 @@ enum SettingsFile {
         guard let data = try? Data(contentsOf: AppGroup.settingsFile),
               let s = try? JSONDecoder().decode(AppSettings.self, from: data) else { return AppSettings() }
         return s
+    }
+
+    static func encoded(_ s: AppSettings) -> Data { (try? JSONEncoder().encode(s)) ?? Data() }
+
+    static func decode(_ data: Data?) -> AppSettings? {
+        guard let data else { return nil }
+        return try? JSONDecoder().decode(AppSettings.self, from: data)
     }
 
     static func save(_ s: AppSettings) {

@@ -44,8 +44,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         completionHandler()
     }
 
-    /// Messages from the app: "reload" (settings changed), "error" (last start error).
+    /// Settings sent by the app when there is no shared App Group (see loadSettings).
+    private var sentSettings: AppSettings?
+
+    /// Messages from the app: "reload" (settings changed; without a shared App Group the settings JSON itself).
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
+        if messageData.first == UInt8(ascii: "{"), let s = SettingsFile.decode(messageData) {
+            sentSettings = s
+            do { try reload(); completionHandler?(Data("ok".utf8)) }
+            catch { completionHandler?(Data(error.localizedDescription.utf8)) }
+            return
+        }
         switch String(decoding: messageData, as: UTF8.self) {
         case "reload":
             do { try reload(); completionHandler?(Data("ok".utf8)) }
@@ -85,8 +94,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         Self.setupDone = true
     }
 
+    /// The App Group file normally; without a shared group (re-signed with a profile that lacks it) the copy the app
+    /// keeps in the VPN profile's providerConfiguration, or the newer one it sent with the last reload.
+    private func loadSettings() -> AppSettings {
+        if AppGroup.isShared { return SettingsFile.load() }
+        if let s = sentSettings { return s }
+        let stored = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration?["settings"] as? Data
+        return SettingsFile.decode(stored) ?? SettingsFile.load()
+    }
+
     private func buildConfig() throws -> String {
-        let s = SettingsFile.load()
+        let s = loadSettings()
         guard let server = s.activeServer else { throw fail(L("Нет сервера: добавьте его в приложении.")) }
         // Extra cores first (Xray, mihomo, TrustTunnel, Tor): sing-box points at their SOCKS ports.
         let ports = try backends.start(s, server)

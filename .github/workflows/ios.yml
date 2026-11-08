@@ -133,6 +133,66 @@ jobs:
           path: build.log
           retention-days: 7
 
+  unsigned-ipa:
+    name: Unsigned IPA (sign it yourself)
+    needs: build-test
+    if: github.event_name != 'pull_request'
+    runs-on: macos-26
+    timeout-minutes: 45
+    permissions:
+      contents: write # the rolling "unsigned" release
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frameworks
+          path: Frameworks
+
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          if [ -d Frameworks/VpnClientFramework.xcframework ]; then cp Config/trusttunnel.yml Config/optional.yml; fi
+          xcodegen generate
+
+      - name: Build for iPhone without signing
+        run: |
+          xcodebuild archive \
+            -project SLMtune.xcodeproj -scheme SLMtune -configuration Release \
+            -destination "generic/platform=iOS" -archivePath build/SLMtune.xcarchive \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            > archive.log 2>&1 || { grep -E "error:" archive.log | sort -u | head -60; tail -40 archive.log; exit 1; }
+          mkdir -p build/ipa/Payload
+          cp -R build/SLMtune.xcarchive/Products/Applications/SLMtune.app build/ipa/Payload/
+          # The entitlements a re-signer should keep (it takes the rest from your provisioning profile).
+          cp PacketTunnel/PacketTunnel.entitlements build/PacketTunnel.entitlements
+          cp App/SLMtune.entitlements build/SLMtune.entitlements
+          (cd build/ipa && zip -qry ../SLMtune-unsigned.ipa Payload)
+          ls -la build/SLMtune-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SLMtune-unsigned-ipa
+          path: build/SLMtune-unsigned.ipa
+          retention-days: 30
+
+      - name: Publish as the "unsigned" release
+        run: |
+          gh release delete unsigned --yes --cleanup-tag 2>/dev/null || true
+          printf '%s\n\n%s\n' \
+            "Неподписанная сборка с последнего коммита ($(git rev-parse --short HEAD), сборка ${{ github.run_number }})." \
+            "Подпишите своим сертификатом (ESign, Feather, Scarlet, zsign). VPN работает, только если в профиле подписи есть разрешение Network Extension (packet-tunnel-provider) — см. docs/GITHUB.md." > notes.md
+          gh release create unsigned build/SLMtune-unsigned.ipa build/SLMtune.entitlements build/PacketTunnel.entitlements \
+            --title "SLMtune (unsigned, build ${{ github.run_number }})" --notes-file notes.md --prerelease --target "$GITHUB_SHA"
+
   testflight:
     name: Sign and upload to TestFlight
     needs: build-test

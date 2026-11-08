@@ -29,7 +29,7 @@ final class AppState: ObservableObject {
             try? await Task.sleep(nanoseconds: 400_000_000)
             guard let self, !Task.isCancelled else { return }
             if Self.needsSystemUpdate(old, s) { await self.vpn.applyOnDemand(s) }
-            if Self.needsReload(old, s) { await self.vpn.reload() }
+            if Self.needsReload(old, s) { await self.vpn.reload(s) }
             if old.preset != s.preset || old.blockLists != s.blockLists { await self.updateLists() }
         }
     }
@@ -86,7 +86,7 @@ final class AppState: ObservableObject {
         listsUpdating = true
         let n = await Lists.update(settings, force: force)
         listsUpdating = false
-        if n > 0 { await vpn.reload() }
+        if n > 0 { await vpn.reload(settings) }
         if force { show(n > 0 ? L("Списки обновлены: %d", n) : L("Списки уже свежие или недоступны.")) }
     }
 
