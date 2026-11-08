@@ -113,7 +113,7 @@ scripts/                  bootstrap.sh, build-libbox.sh, build-trusttunnel.sh, u
 ## Сборка на Mac — по шагам
 
 Нужно: Mac с macOS 14+, **Xcode 16+** (Control Center-кнопка требует iOS 18 SDK), **платный Apple Developer
-аккаунт** ($99/год — бесплатный не даёт Network Extension), iPhone/iPad с iOS 16+. Туннель в симуляторе
+аккаунт** ($99/год — бесплатный не даёт Network Extension), iPhone/iPad с iOS 17+ (SSH-библиотека Citadel требует 17). Туннель в симуляторе
 **не работает** — только на устройстве.
 
 1. **Apple Developer → Identifiers** (или «Automatically manage signing» в Xcode сделает это сам):
