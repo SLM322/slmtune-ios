@@ -2,6 +2,8 @@
 #
 # Every push / pull request:  cores (Libbox.xcframework) → XcodeGen → build all targets and run the tests on the
 #                             iOS simulator. Nothing is signed; no secrets needed.
+# Run manually with "ipa" on:       a development-signed IPA for the iPhones registered in your account (Devices),
+#                             published as a GitHub release with an install link (docs/GITHUB.md).
 # Run manually ("Run workflow") with "testflight" on: the same, then an App Store build signed by Xcode's automatic
 #                             signing with an App Store Connect API key, uploaded to TestFlight — install it on the
 #                             iPhone with the TestFlight app. Secrets and variables: see docs/GITHUB.md.
@@ -13,6 +15,10 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      ipa:
+        description: "Собрать IPA для своего iPhone (профиль разработчика)"
+        type: boolean
+        default: false
       testflight:
         description: "Подписать и загрузить в TestFlight"
         type: boolean
@@ -207,6 +213,135 @@ jobs:
         with:
           name: archive-log
           path: archive.log
+          retention-days: 7
+
+      - name: Remove the key
+        if: always()
+        run: rm -rf ~/.appstoreconnect
+
+  ipa:
+    name: IPA for your iPhone (development signing)
+    needs: build-test
+    if: github.event_name == 'workflow_dispatch' && inputs.ipa
+    runs-on: macos-26
+    timeout-minutes: 60
+    permissions:
+      contents: write # the GitHub release with the IPA
+    env:
+      TEAM_ID: ${{ vars.TEAM_ID }}
+      BUNDLE_PREFIX: ${{ vars.BUNDLE_PREFIX }}
+      APP_GROUP: ${{ vars.APP_GROUP }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frameworks
+          path: Frameworks
+
+      - name: Check the settings
+        run: |
+          for v in TEAM_ID BUNDLE_PREFIX APP_GROUP ASC_KEY_ID ASC_ISSUER_ID; do
+            [ -n "${!v}" ] || { echo "::error::Не задано $v — см. docs/GITHUB.md"; exit 1; }
+          done
+
+      - name: App Store Connect API key
+        env:
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          KEY=~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          echo "$ASC_KEY_P8_BASE64" | base64 --decode > "$KEY"
+          echo "ASC_KEY_PATH=$KEY" >> "$GITHUB_ENV"
+
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          if [ -d Frameworks/VpnClientFramework.xcframework ]; then cp Config/trusttunnel.yml Config/optional.yml; fi
+          xcodegen generate
+
+      - name: Archive (development signing; profiles cover the devices registered in the account)
+        run: |
+          xcodebuild archive \
+            -project SLMtune.xcodeproj -scheme SLMtune -configuration Release \
+            -destination "generic/platform=iOS" -archivePath build/SLMtune.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            -skipPackagePluginValidation -skipMacroValidation \
+            DEVELOPMENT_TEAM="$TEAM_ID" BUNDLE_PREFIX="$BUNDLE_PREFIX" APP_GROUP="$APP_GROUP" \
+            CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            > archive.log 2>&1 || { grep -E "error:" archive.log | sort -u | head -60; tail -40 archive.log; exit 1; }
+
+      - name: Export the IPA
+        run: |
+          cat > ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>debugging</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive -archivePath build/SLMtune.xcarchive -exportOptionsPlist ExportOptions.plist \
+            -exportPath build/export -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            > export.log 2>&1 || { grep -E "error" export.log | head -40; tail -30 export.log; exit 1; }
+          mv build/export/*.ipa build/SLMtune.ipa
+          ls -la build/SLMtune.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SLMtune-ipa
+          path: build/SLMtune.ipa
+          retention-days: 30
+
+      - name: Release with an install link
+        run: |
+          TAG="dev-${{ github.run_number }}"
+          BASE="https://github.com/${{ github.repository }}/releases/download/$TAG"
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print :ApplicationProperties:CFBundleShortVersionString" build/SLMtune.xcarchive/Info.plist)
+          # Over-the-air install manifest (itms-services): works for development-signed apps on registered iPhones.
+          cat > build/manifest.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict><key>items</key><array><dict>
+            <key>assets</key><array><dict>
+              <key>kind</key><string>software-package</string>
+              <key>url</key><string>$BASE/SLMtune.ipa</string>
+            </dict></array>
+            <key>metadata</key><dict>
+              <key>bundle-identifier</key><string>$BUNDLE_PREFIX</string>
+              <key>bundle-version</key><string>$VERSION</string>
+              <key>kind</key><string>software</string>
+              <key>title</key><string>SLMtune</string>
+            </dict>
+          </dict></array></dict></plist>
+          EOF
+          LINK="itms-services://?action=download-manifest&url=$BASE/manifest.plist"
+          printf '%s\n\n%s\n\n    %s\n\n%s\n' \
+            "Сборка для iPhone, зарегистрированных в аккаунте разработчика (Devices). Подпись действует год." \
+            "Установка с iPhone: скопируйте строку ниже, вставьте в адресную строку Safari, «Перейти» → «Установить»:" \
+            "$LINK" \
+            "Или скачайте SLMtune.ipa и поставьте по кабелю (docs/GITHUB.md)." > notes.md
+          gh release create "$TAG" build/SLMtune.ipa build/manifest.plist \
+            --title "SLMtune $VERSION ($TAG)" --notes-file notes.md --prerelease
+          printf '### IPA готов: %s\n\nСсылка для Safari на iPhone:\n\n    %s\n' "$TAG" "$LINK" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ipa-logs
+          path: |
+            archive.log
+            export.log
           retention-days: 7
 
       - name: Remove the key
