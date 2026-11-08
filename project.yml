@@ -140,6 +140,9 @@ targets:
       - sdk: libresolv.tbd
       - sdk: libz.tbd
       - sdk: NetworkExtension.framework
+      # sing-box's power report (service/powerreport) uses UIDevice / UIApplication; the cgo LDFLAGS don't
+      # travel inside the static framework.
+      - sdk: UIKit.framework
 
   # Home / lock screen widget and the Control Center button (iOS 18).
   SLMtuneWidget:
