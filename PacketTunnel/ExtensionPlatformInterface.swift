@@ -122,10 +122,10 @@ final class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoco
 
     // MARK: Network
 
-    func usePlatformAutoDetectInterfaceControl() -> Bool { true }
+    func usePlatformAutoDetectControl() -> Bool { true }
 
     /// Sockets opened inside a Network Extension never loop back into its own tunnel: nothing to bind.
-    func autoDetectInterfaceControl(_ fd: Int32) throws {}
+    func autoDetectControl(_ fd: Int32) throws {}
 
     func startDefaultInterfaceMonitor(_ listener: LibboxInterfaceUpdateListenerProtocol?) throws {
         guard let listener else { return }
@@ -234,8 +234,9 @@ final class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoco
         throw fail("not supported")
     }
     func lookupUser(_ username: String?) throws -> LibboxPlatformUser { throw fail("not supported") }
-    func lookupSFTPServer() throws -> String { throw fail("not supported") }
-    func readSystemSSHHostKey() throws -> String { throw fail("not supported") }
+    // (string, error) Go methods come in as an error pointer, not `throws`.
+    func lookupSFTPServer(_ error: NSErrorPointer) -> String { error?.pointee = fail("not supported"); return "" }
+    func readSystemSSHHostKey(_ error: NSErrorPointer) -> String { error?.pointee = fail("not supported"); return "" }
     func tailscaleHostname() -> String { "SLMtune-iPhone" }
     func usePlatformBridge() -> Bool { false }
     func createBridge(_ options: LibboxBridgeOptions?) throws -> LibboxBridgeSessionProtocol { throw fail("not supported") }
