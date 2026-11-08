@@ -1,0 +1,13 @@
+// Fill these in before building on a Mac (or override in Config/Local.xcconfig, which git should ignore).
+//
+// DEVELOPMENT_TEAM — your Team ID: developer.apple.com → Account → Membership details (10 characters).
+// BUNDLE_PREFIX    — app bundle id; the extension becomes $(BUNDLE_PREFIX).PacketTunnel.
+//                    Must be registered in your account with the Network Extensions and App Groups capabilities.
+// APP_GROUP        — the App Group shared by the app and the extension (must start with "group.").
+
+DEVELOPMENT_TEAM = XXXXXXXXXX
+BUNDLE_PREFIX = com.slmtune.ios
+APP_GROUP = group.com.slmtune.ios
+CODE_SIGN_STYLE = Automatic
+
+#include? "Local.xcconfig"

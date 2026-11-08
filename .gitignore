@@ -1,0 +1,15 @@
+.build/
+Frameworks/Libbox.xcframework/
+SLMtune.xcodeproj/
+App/Info.plist
+App/SLMtune.entitlements
+PacketTunnel/Info.plist
+PacketTunnel/PacketTunnel.entitlements
+Config/Local.xcconfig
+DerivedData/
+xcuserdata/
+*.xcuserstate
+.DS_Store
+Widget/Info.plist
+Widget/SLMtuneWidget.entitlements
+Frameworks/VpnClientFramework.xcframework/

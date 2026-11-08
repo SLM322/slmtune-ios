@@ -1,0 +1,214 @@
+# SLMtune for iOS on GitHub's macOS machines: no Mac of your own needed.
+#
+# Every push / pull request:  cores (Libbox.xcframework) → XcodeGen → build all targets and run the tests on the
+#                             iOS simulator. Nothing is signed; no secrets needed.
+# Run manually ("Run workflow") with "testflight" on: the same, then an App Store build signed by Xcode's automatic
+#                             signing with an App Store Connect API key, uploaded to TestFlight — install it on the
+#                             iPhone with the TestFlight app. Secrets and variables: see docs/GITHUB.md.
+name: iOS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      testflight:
+        description: "Подписать и загрузить в TestFlight"
+        type: boolean
+        default: false
+      trusttunnel:
+        description: "Собрать TrustTunnel (C++, +20–30 минут)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The Tor.framework package needs Swift 6.3+ (Xcode 27).
+  XCODE_VERSION: latest-stable
+
+jobs:
+  cores:
+    name: Cores (sing-box + Xray + mihomo + Tor transports, TrustTunnel)
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Cache Libbox.xcframework
+        id: libbox-cache
+        uses: actions/cache@v4
+        with:
+          path: Frameworks/Libbox.xcframework
+          key: libbox-${{ hashFiles('core/go.mod', 'core/go.sum', 'core/*.go', 'scripts/build-libbox.sh') }}
+
+      - uses: actions/setup-go@v5
+        if: steps.libbox-cache.outputs.cache-hit != 'true'
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - name: Build Libbox.xcframework
+        if: steps.libbox-cache.outputs.cache-hit != 'true'
+        run: bash scripts/build-libbox.sh
+
+      - name: Cache VpnClientFramework.xcframework (TrustTunnel)
+        id: tt-cache
+        if: inputs.trusttunnel
+        uses: actions/cache@v4
+        with:
+          path: Frameworks/VpnClientFramework.xcframework
+          key: trusttunnel-${{ hashFiles('TrustTunnelBridge/*', 'scripts/build-trusttunnel.sh') }}
+
+      - name: Build TrustTunnel
+        if: inputs.trusttunnel && steps.tt-cache.outputs.cache-hit != 'true'
+        run: |
+          brew install cmake conan cocoapods
+          rustup toolchain install stable --profile minimal
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+          bash scripts/build-trusttunnel.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frameworks
+          path: Frameworks/*.xcframework
+          retention-days: 7
+
+  build-test:
+    name: Build and test (simulator)
+    needs: cores
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frameworks
+          path: Frameworks
+
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          if [ -d Frameworks/VpnClientFramework.xcframework ]; then cp Config/trusttunnel.yml Config/optional.yml; fi
+          xcodegen generate
+
+      - name: Pick a simulator
+        id: sim
+        run: |
+          ID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+      - name: Build every target and run the tests
+        run: |
+          xcodebuild test \
+            -project SLMtune.xcodeproj -scheme SLMtune \
+            -destination "id=${{ steps.sim.outputs.id }}" \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            > build.log 2>&1 || { grep -E "error:" build.log | sort -u | head -100; tail -40 build.log; exit 1; }
+          grep -E "Executed [0-9]+ tests" build.log | tail -1
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7
+
+  testflight:
+    name: Sign and upload to TestFlight
+    needs: build-test
+    if: github.event_name == 'workflow_dispatch' && inputs.testflight
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      TEAM_ID: ${{ vars.TEAM_ID }}
+      BUNDLE_PREFIX: ${{ vars.BUNDLE_PREFIX }}
+      APP_GROUP: ${{ vars.APP_GROUP }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frameworks
+          path: Frameworks
+
+      - name: Check the settings
+        run: |
+          for v in TEAM_ID BUNDLE_PREFIX APP_GROUP ASC_KEY_ID ASC_ISSUER_ID; do
+            [ -n "${!v}" ] || { echo "::error::Не задано $v — см. docs/GITHUB.md"; exit 1; }
+          done
+
+      - name: App Store Connect API key
+        env:
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          KEY=~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          echo "$ASC_KEY_P8_BASE64" | base64 --decode > "$KEY"
+          echo "ASC_KEY_PATH=$KEY" >> "$GITHUB_ENV"
+
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          if [ -d Frameworks/VpnClientFramework.xcframework ]; then cp Config/trusttunnel.yml Config/optional.yml; fi
+          xcodegen generate
+
+      - name: Archive (automatic signing with the API key)
+        run: |
+          xcodebuild archive \
+            -project SLMtune.xcodeproj -scheme SLMtune -configuration Release \
+            -destination "generic/platform=iOS" -archivePath build/SLMtune.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            -skipPackagePluginValidation -skipMacroValidation \
+            DEVELOPMENT_TEAM="$TEAM_ID" BUNDLE_PREFIX="$BUNDLE_PREFIX" APP_GROUP="$APP_GROUP" \
+            CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            > archive.log 2>&1 || { grep -E "error:" archive.log | sort -u | head -60; tail -40 archive.log; exit 1; }
+
+      - name: Upload to TestFlight
+        run: |
+          cat > ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive -archivePath build/SLMtune.xcarchive -exportOptionsPlist ExportOptions.plist \
+            -exportPath build/export -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          echo "Сборка ${{ github.run_number }} загружена: через 5–15 минут она появится в TestFlight."
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: archive-log
+          path: archive.log
+          retention-days: 7
+
+      - name: Remove the key
+        if: always()
+        run: rm -rf ~/.appstoreconnect

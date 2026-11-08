@@ -1,0 +1,204 @@
+# XcodeGen spec: `xcodegen generate` on a Mac turns this into SLMtune.xcodeproj
+# (scripts/bootstrap.sh does it for you). Signing values live in Config/Signing.xcconfig.
+# Config/optional.yml is written by bootstrap.sh: it adds TrustTunnel when Frameworks/VpnClientFramework.xcframework
+# has been built (scripts/build-trusttunnel.sh); without it the app builds and TrustTunnel servers report it missing.
+name: SLMtune
+include:
+  - path: Config/optional.yml
+    relativePaths: false
+options:
+  bundleIdPrefix: com.slmtune
+  deploymentTarget:
+    iOS: "16.0"
+  developmentLanguage: ru
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/Signing.xcconfig
+  Release: Config/Signing.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "4.1"
+    CURRENT_PROJECT_VERSION: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    ENABLE_BITCODE: NO
+    DEAD_CODE_STRIPPING: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: NO
+
+packages:
+  # SSH for «Мои серверы»
+  Citadel:
+    url: https://github.com/orlandos-nl/Citadel
+    from: "0.12.0"
+  # Self-signed certificates for Hysteria2 / TrustTunnel on your own server
+  swift-certificates:
+    url: https://github.com/apple/swift-certificates
+    from: "1.21.0"
+  swift-crypto:
+    url: https://github.com/apple/swift-crypto
+    from: "3.0.0"
+  # Tor (C tor 0.4.8.x, prebuilt xcframework) for Tor servers in the VPN extension
+  TorFramework:
+    url: https://github.com/iCepa/Tor.framework
+    exactVersion: "409.15.3"
+
+targets:
+  SLMtune:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Shared
+      - path: Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_PREFIX)
+        PRODUCT_NAME: SLMtune
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        INFOPLIST_KEY_UIUserInterfaceStyle: Dark
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: SLMtune
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDevelopmentRegion: ru
+        CFBundleLocalizations: [ru, en]
+        SLMAppGroup: $(APP_GROUP)
+        UILaunchScreen:
+          UIColorName: Ink
+          UIImageName: Logo
+        UIUserInterfaceStyle: Dark
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UISupportedInterfaceOrientations~ipad:
+          [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown,
+           UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSCameraUsageDescription: "Камера нужна, чтобы отсканировать QR-код сервера или подписки."
+        NSLocalNetworkUsageDescription: "Нужно, чтобы локальная сеть (принтеры, AirPlay) работала мимо VPN."
+        ITSAppUsesNonExemptEncryption: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.slmtune.import
+            CFBundleURLSchemes: [slmtune, vless, vmess, trojan, ss, hysteria2, hy2, tuic, anytls, tt, mierus, ssr]
+    entitlements:
+      path: App/SLMtune.entitlements
+      properties:
+        com.apple.developer.networking.networkextension: [packet-tunnel-provider]
+        com.apple.security.application-groups: [$(APP_GROUP)]
+        com.apple.developer.networking.wifi-info: true
+    dependencies:
+      - target: PacketTunnel
+        embed: true
+      - target: SLMtuneWidget
+        embed: true
+      - package: Citadel
+      - package: swift-certificates
+        product: X509
+      - package: swift-crypto
+        product: Crypto
+
+  PacketTunnel:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: PacketTunnel
+      - path: Shared
+      - path: Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_PREFIX).PacketTunnel
+        PRODUCT_NAME: PacketTunnel
+        TARGETED_DEVICE_FAMILY: "1,2"
+        # Go runtime inside Libbox (sing-box + Xray + mihomo + Tor transports)
+        OTHER_LDFLAGS: "$(inherited) -lresolv"
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../../Frameworks @executable_path/Frameworks"
+        SKIP_INSTALL: YES
+    info:
+      path: PacketTunnel/Info.plist
+      properties:
+        CFBundleDisplayName: SLMtune
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        SLMAppGroup: $(APP_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+    entitlements:
+      path: PacketTunnel/PacketTunnel.entitlements
+      properties:
+        com.apple.developer.networking.networkextension: [packet-tunnel-provider]
+        com.apple.security.application-groups: [$(APP_GROUP)]
+        com.apple.developer.networking.wifi-info: true
+    dependencies:
+      - framework: Frameworks/Libbox.xcframework
+        embed: false
+      - package: TorFramework
+        product: CTor
+      - sdk: libresolv.tbd
+      - sdk: libz.tbd
+      - sdk: NetworkExtension.framework
+
+  # Home / lock screen widget and the Control Center button (iOS 18).
+  SLMtuneWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: Widget
+      - path: Shared
+      - path: Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_PREFIX).Widget
+        PRODUCT_NAME: SLMtuneWidget
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: SLMtune
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        SLMAppGroup: $(APP_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widget/SLMtuneWidget.entitlements
+      properties:
+        # Starting / stopping the VPN profile from the widget button
+        com.apple.developer.networking.networkextension: [packet-tunnel-provider]
+        com.apple.security.application-groups: [$(APP_GROUP)]
+    dependencies:
+      - sdk: WidgetKit.framework
+      - sdk: NetworkExtension.framework
+
+  # Logic tests for share links and the sing-box config (no device, no libbox needed).
+  SLMtuneTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+      - path: Shared
+      - path: Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_PREFIX).Tests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  SLMtune:
+    build:
+      targets:
+        SLMtune: all
+        PacketTunnel: all
+        SLMtuneWidget: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets: [SLMtuneTests]
+    archive:
+      config: Release

@@ -1,0 +1,13 @@
+# Merged into project.yml (via Config/optional.yml) when Frameworks/VpnClientFramework.xcframework exists.
+# XcodeGen appends arrays when merging includes, so these become extra dependencies.
+targets:
+  SLMtune:
+    dependencies:
+      # dynamic framework: embedded once in the app, the extension finds it via @executable_path/../../Frameworks
+      - framework: Frameworks/VpnClientFramework.xcframework
+        embed: true
+        link: false
+  PacketTunnel:
+    dependencies:
+      - framework: Frameworks/VpnClientFramework.xcframework
+        embed: false
