@@ -30,10 +30,13 @@ VPN-клиент SLMtune для iPhone и iPad: SwiftUI-приложение, р
 - Нашёлся и исправлен баг: параметр AmneziaWG `jc` уходил в mihomo строкой. Такое же условие есть в Windows-версии
   (`MoreProtocols.ToMihomoConfig`: `key.StartsWith("j") && key.Length == 2` захватывает и `jc`).
 
-**Не проверено:** код, зависящий от iOS-фреймворков (SwiftUI, NetworkExtension, WidgetKit — папки `App/`,
-`PacketTunnel/`, `Widget/`), не компилировался: для него нужен iOS SDK (Xcode или xtool с `Xcode.xip`). Ничего
-не запускалось на iPhone. Сборка `gomobile bind` (нужен Mac), TrustTunnel-моста (C++) и связка с Tor.framework тоже
-не проверялись. Первая сборка почти наверняка потребует правок — список мест в разделе «Если не собирается».
+**Проверено на GitHub Actions (macOS 26, Xcode 26.6)** — [SLM322/slmtune-ios](https://github.com/SLM322/slmtune-ios/actions):
+`gomobile bind` собирает `Libbox.xcframework` (sing-box + Xray + mihomo + мосты Tor), **все цели — приложение,
+VPN-расширение (вместе с Tor.framework), виджет — компилируются и линкуются**, 19 тестов проходят на симуляторе iPhone.
+
+**Не проверено:** ничего не запускалось на настоящем iPhone (VPN в симуляторе не работает) — это следующий шаг,
+через TestFlight (docs/GITHUB.md). Мост TrustTunnel (C++) в CI пока не собирался (галочка «Собрать TrustTunnel»),
+подпись и загрузка в TestFlight тоже не проверялись.
 
 ## Что из Windows-версии есть на iOS
 
