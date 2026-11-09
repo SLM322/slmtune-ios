@@ -1,0 +1,717 @@
+<title>SLMtune для iOS</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one dark world — the app's own ink and magenta. Alternating rows of text + phone renders,
+   a tunnel diagram as the centrepiece, then the Windows→iOS ledger. Single theme by choice. */
+:root {
+  --ink: #0B0B0D;          /* app background */
+  --panel: #151518;        /* app card */
+  --panel-2: #1C1C21;
+  --line: #2A2A30;
+  --text: #F2F2F5;
+  --text-2: #A6A6B0;
+  --text-3: #6E6E78;
+  --accent: #D100D1;
+  --accent-2: #FF3DFF;
+  --ok: #34D399;
+  --warn: #F5B83D;
+  --err: #FF5C7A;
+  --grad: linear-gradient(135deg, var(--accent), var(--accent-2));
+  --f-display: "Unbounded", "Golos Text", system-ui, sans-serif;
+  --f-body: "Golos Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --f-ios: -apple-system, "SF Pro Text", "Golos Text", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--ink); }
+body {
+  margin: 0; color: var(--text); font: 16px/1.6 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1120px; margin: 0 auto; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: clamp(26px, 4vw, 38px); line-height: 1.15; font-weight: 700; }
+h3 { font-size: 18px; font-weight: 700; }
+p { margin: 0; max-width: 62ch; }
+.eyebrow { font: 600 12px/1 var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--accent-2); }
+.muted { color: var(--text-2); }
+a { color: var(--accent-2); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 3px; }
+code, .mono { font-family: var(--f-mono); font-size: .88em; }
+
+/* ---------- hero ---------- */
+.hero { display: grid; grid-template-columns: 1.1fr .9fr; gap: 48px; align-items: center; padding-block: 64px 40px; }
+.hero h1 { font-size: clamp(44px, 7.5vw, 92px); line-height: .95; font-weight: 800; }
+.hero h1 .slm { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero h1 small { display: block; font-size: .36em; font-weight: 500; color: var(--text-2); margin-top: 14px; letter-spacing: 0; }
+.hero .lead { font-size: 19px; color: var(--text-2); margin-top: 24px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
+.chip { font: 500 13px/1 var(--f-mono); padding: 8px 11px; border: 1px solid var(--line); border-radius: 999px; color: var(--text-2); }
+.chip b { color: var(--text); font-weight: 600; }
+.hero-phone { display: flex; justify-content: center; position: relative; }
+.hero-phone::before { content: ""; position: absolute; inset: 10% 5%; background: radial-gradient(closest-side, rgba(209,0,209,.38), transparent); filter: blur(30px); }
+.note { font-size: 13px; color: var(--text-3); margin-top: 22px; }
+
+/* ---------- section rhythm ---------- */
+section { padding-block: 64px; border-top: 1px solid var(--line); }
+.head { display: grid; gap: 14px; margin-bottom: 36px; }
+
+/* ---------- tunnel diagram ---------- */
+.tunnel { display: grid; grid-template-columns: auto 1fr; gap: 0 28px; align-items: stretch; overflow-x: auto; }
+.flow { display: grid; grid-template-columns: 150px 40px 190px 40px 1fr; align-items: center; min-width: 760px; row-gap: 12px; }
+.node { border: 1px solid var(--line); background: var(--panel); border-radius: 14px; padding: 14px 16px; }
+.node .t { font: 700 15px/1.2 var(--f-display); }
+.node .s { font-size: 13px; color: var(--text-2); margin-top: 4px; }
+.node.hot { border-color: transparent; background: linear-gradient(var(--panel), var(--panel)) padding-box, var(--grad) border-box; border: 1.5px solid transparent; }
+.arrow { height: 2px; background: var(--line); position: relative; }
+.arrow::after { content: ""; position: absolute; right: -1px; top: -4px; border: 5px solid transparent; border-left-color: var(--line); }
+.engines { display: grid; gap: 10px; }
+.eng { display: grid; grid-template-columns: 120px 1fr auto; gap: 14px; align-items: center; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.eng .n { font: 700 14px/1.2 var(--f-display); }
+.eng .p { font-size: 13px; color: var(--text-2); }
+.eng .port { font: 12px/1 var(--f-mono); color: var(--accent-2); white-space: nowrap; }
+.eng.direct .port { color: var(--ok); }
+.tunnel-note { margin-top: 22px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.tunnel-note div { font-size: 14px; color: var(--text-2); }
+.tunnel-note b { display: block; color: var(--text); font-family: var(--f-display); font-size: 14px; margin-bottom: 4px; }
+
+/* ---------- protocol table ---------- */
+.proto { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.proto div { background: var(--ink); padding: 16px 18px; display: grid; gap: 6px; align-content: start; }
+.proto .name { font: 600 15px/1.25 var(--f-body); }
+.proto .core { font: 11px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.proto .core.x { color: var(--accent-2); }
+
+/* ---------- feature rows ---------- */
+.feature { display: grid; grid-template-columns: 1fr 320px; gap: 56px; align-items: center; padding-block: 48px; }
+.feature.flip { grid-template-columns: 320px 1fr; }
+.feature.flip .copy { order: 2; }
+.copy { display: grid; gap: 16px; }
+.copy ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.copy li { padding-left: 22px; position: relative; color: var(--text-2); max-width: 60ch; }
+.copy li::before { content: ""; position: absolute; left: 2px; top: .62em; width: 8px; height: 8px; border-radius: 2px; background: var(--grad); transform: rotate(45deg); }
+.copy li b { color: var(--text); font-weight: 600; }
+.pair { display: flex; gap: 22px; justify-content: center; flex-wrap: wrap; }
+
+/* ---------- iPhone render ---------- */
+.phone {
+  width: 290px; height: 610px; border-radius: 46px; padding: 11px; position: relative; flex: none;
+  background: linear-gradient(145deg, #3a3a42, #17171b 40%, #2b2b31); box-shadow: 0 30px 60px -20px rgba(0,0,0,.8), 0 0 0 1px #45454e inset;
+}
+.screen { width: 100%; height: 100%; border-radius: 36px; overflow: hidden; background: var(--ink); position: relative; font-family: var(--f-ios); color: var(--text); display: flex; flex-direction: column; }
+.island { position: absolute; top: 9px; left: 50%; transform: translateX(-50%); width: 88px; height: 25px; border-radius: 20px; background: #000; z-index: 3; }
+.sb { display: flex; justify-content: space-between; align-items: center; padding: 13px 22px 0 26px; font: 600 13px/1 var(--f-ios); height: 40px; flex: none; }
+.sb .ic { display: flex; gap: 5px; align-items: center; }
+.sb .vpn { font-size: 9px; font-weight: 700; padding: 1px 3px; border: 1px solid currentColor; border-radius: 3px; }
+.nav { display: flex; justify-content: space-between; align-items: center; padding: 6px 14px 8px; font-size: 15px; font-weight: 600; flex: none; }
+.nav .side { color: var(--accent-2); font-size: 13px; font-weight: 500; min-width: 40px; }
+.nav .side:last-child { text-align: right; }
+.large { font: 700 26px/1.1 var(--f-ios); padding: 2px 16px 8px; flex: none; }
+.body { flex: 1; overflow: hidden; padding: 0 12px; display: flex; flex-direction: column; gap: 10px; }
+.tabbar { flex: none; display: grid; grid-template-columns: repeat(4, 1fr); background: var(--panel); border-top: 1px solid var(--line); padding: 7px 4px 18px; }
+.tabbar span { display: grid; justify-items: center; gap: 2px; font-size: 9px; color: var(--text-3); }
+.tabbar span.on { color: var(--accent-2); }
+.tabbar svg { width: 20px; height: 20px; }
+.sec { font-size: 11px; text-transform: uppercase; color: var(--text-3); padding: 4px 6px 0; letter-spacing: .02em; }
+.foot { font-size: 10px; color: var(--text-3); padding: 0 6px; line-height: 1.35; }
+.group { background: var(--panel-2); border-radius: 11px; overflow: hidden; }
+.row { display: flex; align-items: center; gap: 9px; padding: 9px 11px; font-size: 13px; min-height: 38px; }
+.row + .row { border-top: 1px solid var(--line); }
+.row .grow { flex: 1; min-width: 0; }
+.row .sub { font-size: 10.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .val { color: var(--text-2); font-size: 12px; }
+.row .t1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tog { width: 36px; height: 21px; border-radius: 11px; background: #3a3a40; position: relative; flex: none; }
+.tog::after { content: ""; position: absolute; top: 2px; left: 2px; width: 17px; height: 17px; border-radius: 50%; background: #fff; }
+.tog.on { background: var(--accent); }
+.tog.on::after { left: 17px; }
+.dot { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--text-3); flex: none; }
+.dot.on { border: none; background: var(--accent-2); position: relative; }
+.dot.on::after { content: ""; position: absolute; left: 6px; top: 3px; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.ping { font-size: 11px; font-variant-numeric: tabular-nums; }
+.g { color: var(--ok); } .y { color: var(--warn); } .r { color: var(--err); } .m { color: var(--text-3); } .a { color: var(--accent-2); }
+.chev { color: var(--text-3); font-size: 15px; }
+.check { color: var(--accent-2); font-weight: 700; }
+
+/* home screen */
+.brand { display: flex; justify-content: space-between; align-items: center; padding: 6px 4px 0; }
+.brand .w { font: 800 22px/1 var(--f-display); letter-spacing: -0.02em; }
+.brand .w b { color: var(--accent-2); }
+.ks { font-size: 10px; color: var(--ok); display: flex; gap: 4px; align-items: center; }
+.power { display: grid; place-items: center; padding: 16px 0 6px; }
+.power .ring { width: 150px; height: 150px; border-radius: 50%; border: 2px solid var(--accent-2); display: grid; place-items: center; }
+.power .btn { width: 128px; height: 128px; border-radius: 50%; background: var(--grad); display: grid; place-items: center; box-shadow: 0 0 34px rgba(209,0,209,.55); }
+.power svg { width: 46px; height: 46px; }
+.state { text-align: center; font-size: 17px; font-weight: 600; color: var(--ok); }
+.timer { text-align: center; font: 12px/1 var(--f-mono); color: var(--text-3); margin-top: -4px; }
+.card { background: var(--panel); border-radius: 13px; padding: 11px 12px; }
+.srv { display: flex; gap: 10px; align-items: center; }
+.srv .gl { width: 30px; height: 30px; border-radius: 9px; background: rgba(255,61,255,.12); display: grid; place-items: center; color: var(--accent-2); font-size: 15px; }
+.speed { display: grid; grid-template-columns: 1fr 1px 1fr; gap: 10px; align-items: center; }
+.speed .v { font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+.speed .tot { font-size: 10px; color: var(--text-3); }
+.speed .sep { height: 30px; background: var(--line); }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); background: #26262c; border-radius: 8px; padding: 2px; margin-top: 7px; }
+.seg span { text-align: center; font-size: 11px; padding: 5px 0; border-radius: 6px; color: var(--text-2); }
+.seg span.on { background: #48484f; color: var(--text); font-weight: 600; }
+
+/* log + connections */
+.log { font: 9.6px/1.5 var(--f-mono); color: var(--text-2); display: grid; gap: 1px; }
+.log .w { color: var(--warn); } .log .e { color: var(--err); }
+.search { background: #26262c; border-radius: 9px; padding: 7px 10px; font-size: 12px; color: var(--text-3); }
+.conn .h { display: flex; justify-content: space-between; gap: 6px; font-size: 12.5px; }
+.conn .h span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conn .d { display: flex; gap: 8px; font-size: 10.5px; margin-top: 2px; }
+.conn .d .sp { margin-left: auto; color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+/* widget + control centre */
+.home-bg { background: radial-gradient(120% 70% at 20% 0%, #3b0a3b, transparent 60%), radial-gradient(90% 60% at 100% 100%, #20063a, transparent 60%), #0d0b12; }
+.widgets { padding: 14px 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.wsmall { aspect-ratio: 1; border-radius: 22px; background: var(--ink); padding: 13px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 8px 20px rgba(0,0,0,.4); }
+.wsmall .t { display: flex; justify-content: space-between; align-items: center; font: 800 13px/1 var(--f-display); }
+.wsmall .t b { color: var(--accent-2); }
+.wsmall .s { font-size: 10px; color: var(--text-2); line-height: 1.3; flex: 1; }
+.wsmall .b { border-radius: 999px; background: var(--grad); text-align: center; font-size: 10.5px; font-weight: 600; padding: 7px 0; }
+.apps { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.app { display: grid; justify-items: center; gap: 4px; font-size: 9.5px; color: #ddd; }
+.app i { width: 52px; height: 52px; border-radius: 13px; display: block; }
+.cc { margin: 6px 18px 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.cc .tile { aspect-ratio: 1; border-radius: 16px; background: rgba(255,255,255,.12); display: grid; place-items: center; }
+.cc .tile.on { background: #fff; color: var(--accent); }
+.cc .tile svg { width: 22px; height: 22px; }
+.lock { text-align: center; padding-top: 18px; }
+.lock .time { font: 200 64px/1 var(--f-ios); }
+.lock .date { font-size: 13px; color: #ddd; }
+.lockw { margin: 14px auto 0; width: 210px; border-radius: 16px; background: rgba(255,255,255,.12); padding: 9px 12px; display: flex; gap: 10px; align-items: center; text-align: left; }
+
+/* ---------- ledger ---------- */
+.ledger-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 16px; }
+table { width: 100%; border-collapse: collapse; min-width: 640px; font-size: 14px; }
+th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+th { font: 600 11px/1 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); background: var(--panel); }
+td:first-child { font-weight: 600; width: 30%; }
+td:last-child { color: var(--text-2); }
+.pill { display: inline-block; font: 600 11px/1 var(--f-mono); padding: 5px 8px; border-radius: 6px; white-space: nowrap; }
+.pill.yes { background: rgba(52,211,153,.14); color: var(--ok); }
+.pill.alt { background: rgba(255,61,255,.14); color: var(--accent-2); }
+.pill.no { background: rgba(255,92,122,.12); color: var(--err); }
+
+/* ---------- status ---------- */
+.status { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.st { border: 1px solid var(--line); border-radius: 16px; padding: 20px; display: grid; gap: 10px; align-content: start; background: var(--panel); }
+.st h3 { display: flex; gap: 10px; align-items: center; }
+.st h3::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+.st ul { margin: 0; padding-left: 18px; color: var(--text-2); font-size: 14px; display: grid; gap: 6px; }
+footer { padding-block: 40px 56px; border-top: 1px solid var(--line); font-size: 13px; color: var(--text-3); display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+
+@media (max-width: 900px) {
+  .hero, .feature, .feature.flip { grid-template-columns: 1fr; gap: 36px; }
+  .feature.flip .copy { order: 0; }
+  .proto { grid-template-columns: repeat(2, 1fr); }
+  .status, .tunnel-note { grid-template-columns: 1fr; }
+  .hero { padding-top: 40px; }
+}
+@media (max-width: 420px) { .proto { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: no-preference) {
+  .power .ring { animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 10px rgba(255,61,255,.08); } }
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v9M6.3 6.8a8 8 0 1 0 11.4 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5M9 9a4.2 4.2 0 1 0 6 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-servers" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="4" y="14" width="16" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="8" cy="7" r="1" fill="currentColor"/><circle cx="8" cy="17" r="1" fill="currentColor"/></symbol>
+    <symbol id="i-route" viewBox="0 0 24 24"><path d="M6 20V9a4 4 0 0 1 4-4h8M15 2l3 3-3 3M6 14a4 4 0 0 0 4 4h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z" fill="currentColor"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="19.5" r="1.4" fill="currentColor"/></symbol>
+    <symbol id="i-plane" viewBox="0 0 24 24"><path d="M21 15.5v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V8.5l-8 5v2l8-2.5V18l-2 1.5V21l3.5-1 3.5 1v-1.5L13 18v-5z" fill="currentColor"/></symbol>
+    <symbol id="i-bt" viewBox="0 0 24 24"><path d="M7 7l10 10-5 4V3l5 4L7 17" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+
+<!-- ======================= HERO ======================= -->
+<header class="hero">
+  <div>
+    <div class="eyebrow">Версия 4.1 beta · iPhone и iPad · iOS 17+</div>
+    <h1 style="margin-top:18px"><span class="slm">SLM</span>tune<small>VPN-клиент для iPhone</small></h1>
+    <p class="lead">Те же серверы, ссылки, подписки и правила, что в версиях для Windows и Android. Пять ядер работают внутри одного VPN-туннеля iOS: sing-box, Xray, mihomo, TrustTunnel и Tor.</p>
+    <div class="chips">
+      <span class="chip"><b>VLESS</b> Reality · XHTTP</span>
+      <span class="chip"><b>Hysteria2</b> · TUIC · AnyTLS</span>
+      <span class="chip"><b>AmneziaWG</b> · WireGuard</span>
+      <span class="chip"><b>TrustTunnel</b></span>
+      <span class="chip"><b>Tor</b> · snowflake · obfs4</span>
+    </div>
+    <p class="note">Все экраны на этой странице — макеты, отрисованные по коду SwiftUI из репозитория. Скриншотов с настоящего iPhone пока нет: приложение ещё не запускали на устройстве.</p>
+  </div>
+
+  <div class="hero-phone">
+    <div class="phone"><div class="screen">
+      <div class="island"></div>
+      <div class="sb"><span>9:41</span><span class="ic"><span class="vpn">VPN</span><svg width="16" height="11"><use href="#i-wifi"/></svg><span>87%</span></span></div>
+      <div class="body" style="padding-top:4px">
+        <div class="brand"><span class="w"><b>SLM</b>tune</span><span class="ks"><svg width="11" height="11"><use href="#i-shield"/></svg>Kill switch</span></div>
+        <div class="power"><div class="ring"><div class="btn"><svg style="color:#fff"><use href="#i-power"/></svg></div></div></div>
+        <div class="state">Подключено</div>
+        <div class="timer">00:42:17</div>
+        <div class="card srv">
+          <div class="gl">◎</div>
+          <div class="grow" style="min-width:0">
+            <div style="font-size:13.5px;font-weight:600">Амстердам · Reality</div>
+            <div class="sub" style="font-size:10.5px;color:var(--text-2)">VLESS · Reality</div>
+          </div>
+          <span class="chev">›</span>
+        </div>
+        <div class="card speed">
+          <div><div class="v"><span class="a">↓</span> 4,8 МБ/с</div><div class="tot">612 МБ</div></div>
+          <div class="sep"></div>
+          <div><div class="v"><span class="a">↑</span> 310 КБ/с</div><div class="tot">48,6 МБ</div></div>
+        </div>
+        <div class="card">
+          <div style="font-size:11.5px;font-weight:600;color:var(--text-2)">Через VPN</div>
+          <div class="seg"><span>Все сайты</span><span class="on">Кроме РФ</span><span>Заблокир.</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px;font-size:12.5px">ИИ всегда через VPN<span class="tog on"></span></div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <span class="on"><svg><use href="#i-home"/></svg>Главная</span>
+        <span><svg><use href="#i-servers"/></svg>Серверы</span>
+        <span><svg><use href="#i-route"/></svg>Маршруты</span>
+        <span><svg><use href="#i-gear"/></svg>Настройки</span>
+      </div>
+    </div></div>
+  </div>
+</header>
+
+<!-- ======================= TUNNEL ======================= -->
+<section>
+  <div class="head">
+    <div class="eyebrow">Как это устроено</div>
+    <h2>Пять ядер в одном туннеле</h2>
+    <p class="muted">iOS не разрешает запускать отдельные программы, поэтому каждое ядро встроено библиотекой в VPN-расширение. Ядра поднимаются только для серверов текущего подключения: у расширения на iOS лимит памяти около 50 МБ.</p>
+  </div>
+  <div class="tunnel" role="img" aria-label="Схема: трафик iPhone идёт в TUN, оттуда в sing-box, который отправляет его напрямую на сервер или через локальные SOCKS-порты в Xray, mihomo, TrustTunnel и Tor">
+    <div class="flow">
+      <div class="node"><div class="t">iPhone</div><div class="s">весь трафик · DNS</div></div>
+      <div class="arrow"></div>
+      <div class="node hot"><div class="t">sing-box</div><div class="s">TUN · правила · DNS · группы · каскад</div></div>
+      <div class="arrow"></div>
+      <div class="engines">
+        <div class="eng direct"><span class="n">напрямую</span><span class="p">VLESS, VMess, Trojan, SS2022, Hysteria2, TUIC, AnyTLS, Naive, WireGuard</span><span class="port">→ сервер</span></div>
+        <div class="eng"><span class="n">Xray</span><span class="p">VLESS XHTTP, VLESS Encryption</span><span class="port">socks 127.0.0.1</span></div>
+        <div class="eng"><span class="n">mihomo</span><span class="p">AmneziaWG, mieru, ShadowsocksR</span><span class="port">socks 127.0.0.1</span></div>
+        <div class="eng"><span class="n">TrustTunnel</span><span class="p">клиент AdGuard в режиме SOCKS</span><span class="port">socks 127.0.0.1</span></div>
+        <div class="eng"><span class="n">Tor</span><span class="p">obfs4 · snowflake · webtunnel · meek</span><span class="port">socks 127.0.0.1</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="tunnel-note">
+    <div><b>Один Go-фреймворк</b>sing-box, Xray, mihomo и мосты Tor собраны одним gomobile: два Go-рантайма в одном процессе не слинкуются.</div>
+    <div><b>Схема как в Windows</b>Каждое дополнительное ядро слушает SOCKS на 127.0.0.1, sing-box ведёт туда трафик своими правилами.</div>
+    <div><b>Проверено по-настоящему</b>tor.exe подключился к сети Tor через встроенный snowflake; Xray и mihomo провели HTTPS-запросы.</div>
+  </div>
+</section>
+
+<!-- ======================= PROTOCOLS ======================= -->
+<section>
+  <div class="head">
+    <div class="eyebrow">Протоколы</div>
+    <h2>Всё, что умеет Windows-версия, кроме отдельных программ</h2>
+  </div>
+  <div class="proto">
+    <div><span class="name">VLESS · Reality · Vision</span><span class="core">sing-box</span></div>
+    <div><span class="name">VLESS XHTTP · Encryption</span><span class="core x">Xray</span></div>
+    <div><span class="name">VMess · Trojan</span><span class="core">sing-box</span></div>
+    <div><span class="name">Shadowsocks 2022 · ShadowTLS</span><span class="core">sing-box</span></div>
+    <div><span class="name">Hysteria2 · port hopping</span><span class="core">sing-box</span></div>
+    <div><span class="name">TUIC v5 · AnyTLS</span><span class="core">sing-box</span></div>
+    <div><span class="name">NaiveProxy · Hysteria v1</span><span class="core">sing-box</span></div>
+    <div><span class="name">WireGuard · WARP</span><span class="core">sing-box</span></div>
+    <div><span class="name">AmneziaWG · vpn://</span><span class="core x">mihomo</span></div>
+    <div><span class="name">mieru · ShadowsocksR</span><span class="core x">mihomo</span></div>
+    <div><span class="name">TrustTunnel · tt://</span><span class="core x">TrustTunnel</span></div>
+    <div><span class="name">Tor с мостами</span><span class="core x">Tor + lyrebird</span></div>
+  </div>
+</section>
+
+<!-- ======================= FEATURES ======================= -->
+<section style="padding-block:16px">
+
+  <!-- Servers -->
+  <div class="feature">
+    <div class="copy">
+      <div class="eyebrow">Серверы</div>
+      <h2>Ссылка, QR, подписка</h2>
+      <ul>
+        <li><b>Из буфера, QR-камерой, из фото</b> — vless://, vmess://, trojan://, ss://, hy2://, tuic://, anytls://, naive+https://, wireguard://, tt://, vpn://, mierus://, ssr:// и конфиги WireGuard целиком.</li>
+        <li><b>Подписки</b> Marzban, 3x-ui, Remnawave: остаток трафика и срок из заголовка subscription-userinfo, автообновление раз в 12 часов.</li>
+        <li><b>Пинг</b> TCP-рукопожатием; QUIC-серверы помечены «UDP».</li>
+        <li><b>Группы</b>: самый быстрый каждые 2 минуты или резерв, пока сервер отвечает.</li>
+        <li><b>Каскад</b> до 4 серверов: выходной видит только адрес промежуточного.</li>
+        <li><b>Поделиться</b>: ссылка и QR-код для другого устройства.</li>
+      </ul>
+    </div>
+    <div class="phone"><div class="screen">
+      <div class="island"></div>
+      <div class="sb"><span>9:41</span><span class="ic"><span class="vpn">VPN</span><svg width="16" height="11"><use href="#i-wifi"/></svg></span></div>
+      <div class="nav"><span class="side">Пинг</span><span></span><span class="side" style="font-size:20px">⊕</span></div>
+      <div class="large">Серверы</div>
+      <div class="body">
+        <div class="group">
+          <div class="row"><span class="dot on"></span><span class="grow"><div class="t1">Амстердам · Reality</div><div class="sub">VLESS · Reality</div></span><span class="ping g">48 мс</span></div>
+          <div class="row"><span class="dot"></span><span class="grow"><div class="t1">Хельсинки · XHTTP</div><div class="sub">VLESS · xhttp · (Xray)</div></span><span class="ping g">61 мс</span></div>
+          <div class="row"><span class="dot"></span><span class="grow"><div class="t1">Мой VPS · Hysteria2</div><div class="sub">Hysteria2</div></span><span class="ping m">UDP</span></div>
+          <div class="row"><span class="dot"></span><span class="grow"><div class="t1">Дом · AmneziaWG</div><div class="sub">AmneziaWG · (mihomo)</div></span><span class="ping m">UDP</span></div>
+        </div>
+        <div class="sec">Мой провайдер</div>
+        <div class="group">
+          <div class="row"><span class="dot"></span><span class="grow"><div class="t1">🇩🇪 Франкфурт</div><div class="sub">Trojan · grpc · каскад</div></span><span class="ping y">184 мс</span></div>
+          <div class="row"><span class="dot"></span><span class="grow"><div class="t1">Самый быстрый</div><div class="sub">Группа · самый быстрый · 4</div></span><span class="ping m"></span></div>
+          <div class="row"><span class="dot"></span><span class="grow"><div class="t1">🇺🇸 Нью-Йорк</div><div class="sub">TUIC</div></span><span class="ping r">нет ответа</span></div>
+        </div>
+        <div class="foot">38,2 из 100 ГБ · до 30.11.2026</div>
+      </div>
+      <div class="tabbar">
+        <span><svg><use href="#i-home"/></svg>Главная</span>
+        <span class="on"><svg><use href="#i-servers"/></svg>Серверы</span>
+        <span><svg><use href="#i-route"/></svg>Маршруты</span>
+        <span><svg><use href="#i-gear"/></svg>Настройки</span>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- Routing -->
+  <div class="feature flip">
+    <div class="copy">
+      <div class="eyebrow">Маршруты</div>
+      <h2>Российские сайты напрямую, остальное через VPN</h2>
+      <ul>
+        <li><b>Три пресета</b>: все сайты, всё кроме РФ (v2fly category-ru и IP-сети ipverse), только заблокированное (itdoginfo).</li>
+        <li><b>ИИ через VPN</b> при любом пресете: ChatGPT, Claude, Gemini и ещё 23 сервиса, каждый можно выключить. Их DNS тоже идёт через VPN.</li>
+        <li><b>Мессенджеры и звонки</b>: Discord, Telegram (вместе с его IP-сетями), WhatsApp, Signal.</li>
+        <li><b>Блокировка</b> рекламы, трекеров и сайтов 18+ списками MetaCubeX — и в DNS.</li>
+        <li><b>Свои правила</b> по сайтам и IP: через VPN, напрямую или блок.</li>
+        <li><b>DNS</b> через VPN и напрямую — DoH, DoT, DoQ.</li>
+      </ul>
+    </div>
+    <div class="phone"><div class="screen">
+      <div class="island"></div>
+      <div class="sb"><span>9:41</span><span class="ic"><span class="vpn">VPN</span><svg width="16" height="11"><use href="#i-wifi"/></svg></span></div>
+      <div class="large" style="padding-top:8px">Маршруты</div>
+      <div class="body">
+        <div class="sec">Что идёт через VPN</div>
+        <div class="group">
+          <div class="row"><span class="grow">Все сайты через VPN</span></div>
+          <div class="row"><span class="grow">Всё, кроме российских сайтов</span><span class="check">✓</span></div>
+          <div class="row"><span class="grow">Только заблокированное</span></div>
+          <div class="row" style="font-size:11.5px"><span class="g">✓</span><span class="grow">Списки загружены</span><span class="a">Обновить</span></div>
+        </div>
+        <div class="sec">Всегда через VPN</div>
+        <div class="group">
+          <div class="row"><span class="grow">ИИ через VPN</span><span class="tog on"></span></div>
+          <div class="row"><span class="grow">Сервисы ИИ</span><span class="val">26</span><span class="chev">›</span></div>
+          <div class="row"><span class="grow">Мессенджеры и звонки</span><span class="tog on"></span></div>
+        </div>
+        <div class="sec">Блокировка</div>
+        <div class="group">
+          <div class="row"><span class="grow">Реклама<div class="sub">баннеры, рекламные сети</div></span><span class="tog on"></span></div>
+          <div class="row"><span class="grow">Трекеры и аналитика</span><span class="tog on"></span></div>
+          <div class="row"><span class="grow">Сайты 18+</span><span class="tog"></span></div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <span><svg><use href="#i-home"/></svg>Главная</span>
+        <span><svg><use href="#i-servers"/></svg>Серверы</span>
+        <span class="on"><svg><use href="#i-route"/></svg>Маршруты</span>
+        <span><svg><use href="#i-gear"/></svg>Настройки</span>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- Protection -->
+  <div class="feature">
+    <div class="copy">
+      <div class="eyebrow">Защита и сети</div>
+      <h2>Kill switch и «дома без VPN» силами самой iOS</h2>
+      <ul>
+        <li><b>Kill switch</b>: iOS не выпускает трафик мимо VPN, даже пока он переподключается (includeAllNetworks). Локальную сеть, AirPlay и принтеры можно оставить доступными.</li>
+        <li><b>Правила сетей</b>: дома VPN выключается, в чужих Wi-Fi и мобильной сети включается сам — даже когда приложение закрыто.</li>
+        <li><b>Против DPI</b>: фрагментация TLS ClientHello и TLS-записей, отпечаток uTLS, мультиплексирование.</li>
+        <li><b>Протоколы</b>: скорость Hysteria, контроль перегрузки TUIC, UDP поверх TCP для Shadowsocks.</li>
+      </ul>
+    </div>
+    <div class="phone"><div class="screen">
+      <div class="island"></div>
+      <div class="sb"><span>9:41</span><span class="ic"><span class="vpn">VPN</span><svg width="16" height="11"><use href="#i-wifi"/></svg></span></div>
+      <div class="large" style="padding-top:8px">Настройки</div>
+      <div class="body">
+        <div class="sec">Защита от утечек</div>
+        <div class="group">
+          <div class="row"><span class="grow">Kill switch</span><span class="tog on"></span></div>
+          <div class="row"><span class="grow">Локальная сеть доступна</span><span class="tog on"></span></div>
+        </div>
+        <div class="sec">Правила сетей</div>
+        <div class="group">
+          <div class="row"><span class="grow">Подключать автоматически</span><span class="tog on"></span></div>
+          <div class="row"><span class="grow">В чужих сетях Wi-Fi</span><span class="tog on"></span></div>
+          <div class="row"><span class="grow">В мобильной сети</span><span class="tog on"></span></div>
+          <div class="row"><span style="color:var(--accent-2)">⌂</span><span class="grow">Keenetic-5G</span><span class="val">дом</span></div>
+        </div>
+        <div class="foot">iOS сама включает VPN в выбранных сетях и выключает дома, даже когда приложение закрыто.</div>
+        <div class="sec">Протоколы</div>
+        <div class="group">
+          <div class="row"><span class="grow">Фрагментация TLS ClientHello</span><span class="tog on"></span></div>
+          <div class="row"><span class="grow">Отпечаток TLS</span><span class="val">chrome</span></div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <span><svg><use href="#i-home"/></svg>Главная</span>
+        <span><svg><use href="#i-servers"/></svg>Серверы</span>
+        <span><svg><use href="#i-route"/></svg>Маршруты</span>
+        <span class="on"><svg><use href="#i-gear"/></svg>Настройки</span>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- Diagnostics -->
+  <div class="feature flip">
+    <div class="copy">
+      <div class="eyebrow">Диагностика</div>
+      <h2>Журнал и живые соединения</h2>
+      <ul>
+        <li><b>Журнал</b>: sing-box, Xray, mihomo, TrustTunnel и Tor в одной ленте, поиск, фильтр ошибок, «Поделиться».</li>
+        <li><b>Соединения</b>: каждый сайт, через какой сервер он идёт, по какому правилу и сколько трафика. Свайп — закрыть.</li>
+        <li><b>Скорость и трафик</b> на главном экране, конфиг sing-box — в настройках (пароли скрыты).</li>
+      </ul>
+    </div>
+    <div class="pair">
+      <div class="phone"><div class="screen">
+        <div class="island"></div>
+        <div class="sb"><span>9:41</span><span class="ic"><span class="vpn">VPN</span></span></div>
+        <div class="nav"><span class="side">‹ Назад</span><span>Соединения</span><span class="side">⊗</span></div>
+        <div class="body">
+          <div class="search">⌕ Сайт или сервер</div>
+          <div class="group">
+            <div class="row"><span class="grow">Всего</span><span class="val">↓ 612 МБ ↑ 48,6 МБ</span></div>
+            <div class="row"><span class="grow">Открыто</span><span class="val">23</span></div>
+          </div>
+          <div class="group conn">
+            <div class="row" style="display:block"><div class="h"><span>chatgpt.com:443</span><span class="m">TCP</span></div><div class="d"><span class="a">proxy</span><span class="m">domain_suffix</span><span class="sp">↓1,2 МБ ↑84 КБ</span></div></div>
+            <div class="row" style="display:block"><div class="h"><span>www.youtube.com:443</span><span class="m">UDP</span></div><div class="d"><span class="a">proxy</span><span class="m">final</span><span class="sp">↓418 МБ ↑6,1 МБ</span></div></div>
+            <div class="row" style="display:block"><div class="h"><span>gosuslugi.ru:443</span><span class="m">TCP</span></div><div class="d"><span class="muted">direct</span><span class="m">rule_set</span><span class="sp">↓2,3 МБ ↑140 КБ</span></div></div>
+            <div class="row" style="display:block"><div class="h"><span>api.telegram.org:443</span><span class="m">TCP</span></div><div class="d"><span class="a">proxy</span><span class="m">ip_cidr</span><span class="sp">↓96 КБ ↑31 КБ</span></div></div>
+            <div class="row" style="display:block"><div class="h"><span>vk.com:443</span><span class="m">TCP</span></div><div class="d"><span class="muted">direct</span><span class="m">rule_set</span><span class="sp">↓5,7 МБ ↑212 КБ</span></div></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- Log + Tor -->
+  <div class="feature">
+    <div class="copy">
+      <div class="eyebrow">Tor</div>
+      <h2>Tor с мостами — прямо в VPN</h2>
+      <ul>
+        <li><b>Snowflake</b> через WebRTC-волонтёров, <b>obfs4</b> и <b>meek</b> со встроенными мостами из Tor Browser, <b>webtunnel</b> и свои мосты из @GetBridgesBot.</li>
+        <li>Пока Tor строит цепочку, журнал показывает прогресс: «tor: 45% Loading relay descriptors».</li>
+        <li>Tor можно поставить первым звеном каскада или выбрать как обычный сервер.</li>
+      </ul>
+    </div>
+    <div class="phone"><div class="screen">
+      <div class="island"></div>
+      <div class="sb"><span>9:41</span><span class="ic"><span class="vpn">VPN</span></span></div>
+      <div class="nav"><span class="side">‹ Назад</span><span>Журнал</span><span class="side">⋯</span></div>
+      <div class="body">
+        <div class="search">⌕ Поиск в журнале</div>
+        <div class="log">
+          <span>15:47:41 [core] xray 7f2a started</span>
+          <span>15:47:41 [core] obfs4: listening 127.0.0.1:52811</span>
+          <span>15:47:53 tor: 15% Handshake with a relay done</span>
+          <span>15:47:54 tor: 25% Asking for networkstatus consensus</span>
+          <span class="w">15:48:20 WARN dns: exchange failed: i/o timeout</span>
+          <span>15:49:42 tor: 40% Loading authority key certs</span>
+          <span>15:49:44 tor: 45% Asking for relay descriptors</span>
+          <span>15:50:15 tor: 75% Loaded enough directory info</span>
+          <span>15:50:16 tor: 90% Handshake finished with a relay</span>
+          <span>15:50:18 tor: 100% Done</span>
+          <span>15:50:18 INFO inbound/tun[tun-in]: started</span>
+          <span>15:50:19 INFO outbound/socks[proxy]: 127.0.0.1:52790</span>
+          <span class="e">15:51:02 ERROR connection: dial tcp: timeout</span>
+          <span>15:51:03 INFO router: found rule_set ru-domains</span>
+          <span>15:51:03 INFO dns: cached chatgpt.com</span>
+          <span>15:51:04 INFO connection: proxy → chatgpt.com:443</span>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- My servers -->
+  <div class="feature flip">
+    <div class="copy">
+      <div class="eyebrow">Мои серверы</div>
+      <h2>Свой VPN-сервер с телефона</h2>
+      <ul>
+        <li><b>Подключение по SSH</b> к VPS с Ubuntu или Debian. Отпечаток ключа сервера сверяется перед первым входом, потом вход по ключу приложения — пароль не хранится.</li>
+        <li><b>12 протоколов</b> одной кнопкой: VLESS Reality, Hysteria2, SS2022, Naive, TrustTunnel, Trojan, TUIC, AnyTLS, VLESS WS и gRPC, SOCKS5 для Telegram, ShadowTLS. Сертификаты Let's Encrypt на бесплатном домене sslip.io.</li>
+        <li><b>Пользователи</b> со своими паролями, счётчиком трафика, лимитом и сроком. Ссылки и QR-коды для каждого.</li>
+        <li><b>Инструменты</b>: обновить sing-box, защитить сервер, подкачка, перезагрузка. Те же скрипты, что в Windows и Android.</li>
+      </ul>
+    </div>
+    <div class="phone"><div class="screen">
+      <div class="island"></div>
+      <div class="sb"><span>9:41</span><span class="ic"><span class="vpn">VPN</span></span></div>
+      <div class="nav"><span class="side">‹ Назад</span><span>Мой VPS</span><span class="side">≡</span></div>
+      <div class="body">
+        <div class="sec">Сервер</div>
+        <div class="group">
+          <div class="row"><span class="grow">Система</span><span class="val">Ubuntu 24.04 · x86_64</span></div>
+          <div class="row"><span class="grow">sing-box</span><span class="val">1.14.4 · active</span></div>
+        </div>
+        <div class="sec">Протоколы</div>
+        <div class="group">
+          <div class="row"><span class="grow">VLESS Reality</span><span class="val">443</span><span class="tog on"></span></div>
+          <div class="row"><span class="grow">Hysteria2</span><span class="val">443</span><span class="tog on"></span></div>
+          <div class="row"><span class="grow">TrustTunnel</span><span class="val">9443</span><span class="tog on"></span></div>
+          <div class="row"><span class="grow">TUIC</span><span class="tog"></span></div>
+        </div>
+        <div class="sec">Пользователи</div>
+        <div class="group">
+          <div class="row" style="display:block">
+            <div style="display:flex;justify-content:space-between"><b style="font-size:13px">me</b><span class="g" style="font-size:11px">активен</span></div>
+            <div class="sub">↑ 3,1 ГБ  ↓ 41,7 ГБ</div>
+          </div>
+          <div class="row" style="display:block">
+            <div style="display:flex;justify-content:space-between"><b style="font-size:13px">mama</b><span class="y" style="font-size:11px">лимит исчерпан</span></div>
+            <div class="sub">↑ 1,2 ГБ  ↓ 48,8 ГБ / 50 ГБ · до 2026-12-31</div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- Widget + CC -->
+  <div class="feature">
+    <div class="copy">
+      <div class="eyebrow">Виджет и Пункт управления</div>
+      <h2>Включить VPN, не открывая приложение</h2>
+      <ul>
+        <li><b>Виджет на экране «Домой»</b>: состояние, сервер и кнопка подключения (iOS 17).</li>
+        <li><b>Экран блокировки</b>: круглый и прямоугольный виджеты.</li>
+        <li><b>Пункт управления</b> (iOS 18): кнопка SLMtune рядом с Wi-Fi и Bluetooth.</li>
+        <li>Тёмная тема в цветах SLMtune, русский и английский язык — переключается в Настройках iOS.</li>
+      </ul>
+    </div>
+    <div class="pair">
+      <div class="phone"><div class="screen home-bg">
+        <div class="island"></div>
+        <div class="sb"><span>9:41</span><span class="ic"><span class="vpn">VPN</span></span></div>
+        <div class="lock">
+          <div class="date">Понедельник, 9 ноября</div>
+          <div class="time">9:41</div>
+          <div class="lockw"><svg width="22" height="22" style="color:#fff"><use href="#i-shield"/></svg><div><div style="font-size:12px;font-weight:600">VPN включён</div><div style="font-size:10px;color:#ccc">Амстердам · Reality</div></div></div>
+        </div>
+        <div class="widgets" style="margin-top:22px">
+          <div class="wsmall">
+            <div class="t"><span><b>SLM</b>tune</span><span style="width:7px;height:7px;border-radius:50%;background:var(--ok)"></span></div>
+            <div class="s">Амстердам · Reality</div>
+            <div class="b">⏻ Отключить</div>
+          </div>
+          <div class="apps">
+            <div class="app"><i style="background:linear-gradient(135deg,#2ad,#16a)"></i>Карты</div>
+            <div class="app"><i style="background:linear-gradient(135deg,#3c5,#1a3)"></i>Сообщения</div>
+            <div class="app"><i style="background:radial-gradient(circle at 50% 45%,#d0d 20%,#0b0b0d 22%)"></i>SLMtune</div>
+            <div class="app"><i style="background:linear-gradient(135deg,#fb3,#f72)"></i>Заметки</div>
+          </div>
+        </div>
+        <div class="sec" style="padding:12px 20px 0;color:#bbb">Пункт управления</div>
+        <div class="cc">
+          <div class="tile"><svg style="color:#fff"><use href="#i-plane"/></svg></div>
+          <div class="tile on" style="color:#0a84ff"><svg><use href="#i-wifi"/></svg></div>
+          <div class="tile on" style="color:#0a84ff"><svg><use href="#i-bt"/></svg></div>
+          <div class="tile on"><svg><use href="#i-shield"/></svg></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= LEDGER ======================= -->
+<section>
+  <div class="head">
+    <div class="eyebrow">Windows → iOS</div>
+    <h2>Что перенесено, что заменено, чего нет</h2>
+    <p class="muted">iOS разрешает VPN-приложению меньше, чем Windows: нет отдельных процессов, драйверов и правил по приложениям. Где возможно — сделано средствами самой iOS.</p>
+  </div>
+  <div class="ledger-wrap">
+    <table>
+      <thead><tr><th>В Windows-версии</th><th>На iOS</th><th>Как</th></tr></thead>
+      <tbody>
+        <tr><td>Все протоколы sing-box, Xray, mihomo</td><td><span class="pill yes">есть</span></td><td>Одной Go-сборкой внутри VPN-расширения</td></tr>
+        <tr><td>TrustTunnel, Tor</td><td><span class="pill yes">есть</span></td><td>Клиент AdGuard (C++) и Tor.framework в том же процессе</td></tr>
+        <tr><td>Пресеты, ИИ через VPN, блокировка рекламы</td><td><span class="pill yes">есть</span></td><td>Те же списки и тот же каталог сервисов</td></tr>
+        <tr><td>Группы, каскад, свои правила, DNS</td><td><span class="pill yes">есть</span></td><td>urltest и detour sing-box</td></tr>
+        <tr><td>Журнал, соединения, «Мои серверы»</td><td><span class="pill yes">есть</span></td><td>Clash API на 127.0.0.1, SSH через Citadel</td></tr>
+        <tr><td>Kill switch на брандмауэре</td><td><span class="pill alt">аналог</span></td><td>includeAllNetworks — трафик не выходит мимо VPN</td></tr>
+        <tr><td>Правила сетей Wi-Fi</td><td><span class="pill alt">аналог</span></td><td>Connect On Demand по SSID, работает без приложения</td></tr>
+        <tr><td>Автозапуск и трей</td><td><span class="pill alt">аналог</span></td><td>Автоподключение, виджет, Пункт управления</td></tr>
+        <tr><td>Правила по программам, игры</td><td><span class="pill no">нет</span></td><td>iOS не сообщает, какому приложению принадлежит соединение</td></tr>
+        <tr><td>Zapret / WinDivert</td><td><span class="pill no">нет</span></td><td>Драйверы перехвата пакетов есть только в Windows</td></tr>
+        <tr><td>Системный прокси, SOCKS для LAN</td><td><span class="pill no">нет</span></td><td>У iOS такого нет</td></tr>
+        <tr><td>Обновление ядер из приложения</td><td><span class="pill no">нет</span></td><td>iOS запрещает загружать исполняемый код — ядра обновляются новой сборкой</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ======================= STATUS ======================= -->
+<section>
+  <div class="head">
+    <div class="eyebrow">Состояние на 9 ноября 2026</div>
+    <h2>Собирается целиком, на iPhone ещё не запускалось</h2>
+  </div>
+  <div class="status">
+    <div class="st" style="--c:var(--ok)">
+      <h3>Проверено</h3>
+      <ul>
+        <li>GitHub Actions: ядра, приложение, VPN-расширение и виджет собираются, 19 тестов проходят на симуляторе</li>
+        <li>18 конфигов, которые генерирует приложение, принимает sing-box 1.14.4</li>
+        <li>Xray, mihomo и TrustTunnel принимают свои конфиги</li>
+        <li>Tor подключается через встроенный snowflake</li>
+      </ul>
+    </div>
+    <div class="st" style="--c:var(--warn)">
+      <h3>Не проверено</h3>
+      <ul>
+        <li>Работа на настоящем iPhone: VPN в симуляторе не запускается</li>
+        <li>Мост TrustTunnel в сборке на GitHub</li>
+        <li>Подпись и загрузка в TestFlight</li>
+      </ul>
+    </div>
+    <div class="st" style="--c:var(--accent-2)">
+      <h3>Как поставить</h3>
+      <ul>
+        <li>Неподписанный IPA — выпуск <a href="https://github.com/SLM322/slmtune-ios/releases/tag/unsigned">unsigned</a> на GitHub</li>
+        <li>Подписать своим сертификатом; VPN заработает, если в профиле есть Network Extension</li>
+        <li>Или платный Apple Developer — TestFlight одной кнопкой</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span>SLMtune для iOS · исходники: <a href="https://github.com/SLM322/slmtune-ios">github.com/SLM322/slmtune-ios</a> · GPL-3.0</span>
+  <span>sing-box · Xray · mihomo · TrustTunnel · Tor</span>
+</footer>
+</div>
