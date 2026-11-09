@@ -1,10 +1,50 @@
 # SLMtune для iOS (4.1 beta)
 
-VPN-клиент SLMtune для iPhone и iPad: SwiftUI-приложение, расширение **Packet Tunnel** (NetworkExtension) и виджет.
-В расширении работает **sing-box** (libbox) — то же ядро, что во фронте Windows-версии и в Android-версии, а рядом
-с ним, в том же процессе, — **Xray**, **mihomo**, **TrustTunnel** и **Tor** для протоколов, которых нет в sing-box.
-Логика ссылок, протоколов и маршрутизации перенесена из `G:\trusttunnel-gui` (`Protocols.cs`, `SingBoxConfig.cs`,
-`MoreProtocols.cs`, `ServiceCatalog.cs`, `ServerSetup.cs`) и `G:\slmtune-android` (`ShareLinks.kt`, `Outbounds.kt`,
+[![iOS](https://github.com/SLM322/slmtune-ios/actions/workflows/ios.yml/badge.svg)](https://github.com/SLM322/slmtune-ios/actions/workflows/ios.yml)
+![iOS 17+](https://img.shields.io/badge/iOS-17%2B-D100D1)
+![License GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-555)
+
+VPN-клиент SLMtune для iPhone и iPad. Те же серверы, ссылки, подписки и правила, что в версиях для Windows и Android.
+Пять ядер работают внутри одного VPN-туннеля iOS: **sing-box**, **Xray**, **mihomo**, **TrustTunnel** и **Tor**.
+
+**[Страница со всеми функциями и макетами экранов →](https://slm322.github.io/slmtune-ios/showcase.html)**
+
+![Главная, серверы, маршруты, настройки](docs/img/screens-1.png)
+![Соединения, журнал, мои серверы, виджет и Пункт управления](docs/img/screens-2.png)
+
+<sub>Макеты нарисованы по коду SwiftUI из этого репозитория, это не скриншоты с устройства. Серверы, трафик и записи
+журнала на них — примеры.</sub>
+
+## Возможности
+
+- **Протоколы:** VLESS (Reality, Vision, WS, gRPC, HTTPUpgrade, XHTTP, Encryption), VMess, Trojan, Shadowsocks 2022,
+  ShadowTLS, Hysteria2 с port hopping, Hysteria, TUIC, AnyTLS, NaiveProxy, WireGuard, AmneziaWG, mieru,
+  ShadowsocksR, SOCKS5, TrustTunnel, Tor с мостами obfs4 / snowflake / webtunnel / meek.
+- **Импорт:** из буфера, QR-кодом с камеры или из фото, ссылками `slmtune://`, конфигами WireGuard и Amnezia `vpn://`.
+  Подписки Marzban, 3x-ui, Remnawave с остатком трафика и сроком.
+- **Маршруты:** все сайты / всё кроме РФ / только заблокированное; ИИ-сервисы и мессенджеры всегда через VPN;
+  блокировка рекламы, трекеров и 18+; свои правила по сайтам и IP; DNS через DoH, DoT, DoQ.
+- **Серверы:** пинг, группы (самый быстрый или резерв), каскад до 4 серверов, «Поделиться» ссылкой и QR-кодом.
+- **Защита:** kill switch (трафик не выходит мимо VPN), автоподключение в чужих Wi-Fi и мобильной сети, дома — без VPN;
+  фрагментация TLS и отпечаток uTLS против DPI.
+- **Диагностика:** журнал всех ядер, живой список соединений, скорость и трафик.
+- **Мои серверы:** свой VPS по SSH с телефона — 12 протоколов, пользователи с лимитами и сроками, ссылки и QR-коды.
+- **Виджет** на экране «Домой» и блокировки, **кнопка в Пункте управления** (iOS 18).
+- Тёмная тема в цветах SLMtune, русский и английский язык.
+
+## Как поставить
+
+- **Неподписанный IPA** с последней сборки — выпуск [unsigned](https://github.com/SLM322/slmtune-ios/releases/tag/unsigned).
+  Подпишите своим сертификатом (ESign, Feather, Scarlet). VPN заработает, только если в профиле подписи есть
+  разрешение Network Extension — подробности в [docs/GITHUB.md](docs/GITHUB.md#4-подпись-купленным-сертификатом-lazyshop-и-подобные).
+- **С платным Apple Developer** — подписанный IPA или TestFlight одной кнопкой в GitHub Actions: [docs/GITHUB.md](docs/GITHUB.md).
+
+## Устройство
+
+SwiftUI-приложение, расширение **Packet Tunnel** (NetworkExtension) и виджет. В расширении работает sing-box (libbox),
+а рядом с ним, в том же процессе, — Xray, mihomo, TrustTunnel и Tor для протоколов, которых нет в sing-box.
+Логика ссылок, протоколов и маршрутизации перенесена из Windows-версии (`Protocols.cs`, `SingBoxConfig.cs`,
+`MoreProtocols.cs`, `ServiceCatalog.cs`, `ServerSetup.cs`) и Android-версии (`ShareLinks.kt`, `Outbounds.kt`,
 `ConfigBuilder.kt`, `ExtraCores.kt`, `MyServers.kt`).
 
 ## Что проверено, а что нет
