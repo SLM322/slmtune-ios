@@ -159,6 +159,8 @@ jobs:
         run: |
           brew install xcodegen
           if [ -d Frameworks/VpnClientFramework.xcframework ]; then cp Config/trusttunnel.yml Config/optional.yml; fi
+          # Tor.framework's package needs Swift 6.3; the x86 runners' Xcode is older.
+          if ! swift --version 2>&1 | grep -Eq 'Swift version (6\.[3-9]|[7-9]|[1-9][0-9])'; then python3 scripts/without-tor.py; fi
           xcodegen generate
 
       - name: Build for iPhone without signing
@@ -270,13 +272,7 @@ jobs:
       - name: Generate the Xcode project without Tor
         run: |
           brew install xcodegen
-          python3 - <<'EOF'
-          import re
-          p = open('project.yml').read()
-          p2 = p.replace("      - package: TorFramework\n        product: CTor\n", "")
-          assert p2 != p
-          open('project.yml', 'w').write(p2)
-          EOF
+          python3 scripts/without-tor.py
           xcodegen generate
 
       - name: Build for iPhone without signing
