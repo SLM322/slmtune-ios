@@ -40,9 +40,45 @@ final class VPNController: ObservableObject {
         if status != c.status { WidgetCenter.shared.reloadAllTimelines() }
         status = c.status
         connectedSince = c.status == .connected ? c.connectedDate : nil
-        if c.status == .disconnected, let e = try? String(contentsOf: AppGroup.lastErrorFile, encoding: .utf8), !e.isEmpty {
+        guard c.status == .disconnected else { return }
+        if let e = try? String(contentsOf: AppGroup.lastErrorFile, encoding: .utf8), !e.isEmpty {
             lastError = e
+        } else {
+            // No shared App Group (re-signed build), or the extension died before writing the file:
+            // ask the system why the tunnel stopped.
+            c.fetchLastDisconnectError { [weak self] error in
+                guard let error = error as NSError? else { return } // nil when the user stopped it
+                Task { @MainActor in self?.lastError = Self.describe(error) }
+            }
         }
+    }
+
+    private static func describe(_ e: NSError) -> String {
+        var text = e.localizedDescription
+        if let u = e.userInfo[NSUnderlyingErrorKey] as? NSError { text += " — " + u.localizedDescription }
+        return text + " (\(e.domain) \(e.code))"
+    }
+
+    /// Журнал without a shared App Group: the running extension sends its own log files.
+    func fetchLog() async -> [LogLine]? {
+        guard !AppGroup.isShared else { return nil }
+        guard let session = manager?.connection as? NETunnelProviderSession, status == .connected else { return [] }
+        return await withCheckedContinuation { done in
+            do {
+                try session.sendProviderMessage(Data("log".utf8)) { data in
+                    let text = String(decoding: data ?? Data(), as: UTF8.self)
+                    done.resume(returning: text.split(separator: "\n").map { l in
+                        let p = l.split(separator: "\t", maxSplits: 1)
+                        return LogLine(source: String(p.first ?? ""), text: String(p.last ?? ""))
+                    })
+                }
+            } catch { done.resume(returning: []) }
+        }
+    }
+
+    func clearLog() {
+        SharedLog.clear()
+        if !AppGroup.isShared { try? (manager?.connection as? NETunnelProviderSession)?.sendProviderMessage(Data("clear-log".utf8)) { _ in } }
     }
 
     /// Creates or updates the profile (the first time iOS asks "Allow SLMtune to add VPN configurations?").
@@ -62,7 +98,7 @@ final class VPNController: ObservableObject {
         if #available(iOS 17.4, *) { p.excludeDeviceCommunication = true }
         p.enforceRoutes = false
         // A copy of the settings for an extension that can't see the App Group (re-signed builds).
-        p.providerConfiguration = AppGroup.isShared ? nil : ["settings": SettingsFile.encoded(s)]
+        p.providerConfiguration = AppGroup.isShared ? nil : ["settings": SettingsFile.encoded(s), "secret": AppGroup.clashSecret]
         m.protocolConfiguration = p
         m.localizedDescription = "SLMtune"
         m.isEnabled = true

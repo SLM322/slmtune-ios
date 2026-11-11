@@ -40,7 +40,11 @@ enum AppGroup {
 
     /// sing-box's Clash API inside the extension (Connections panel): loopback only, with a per-install secret.
     static let clashPort = 19090
+    /// Without a shared folder the extension can't read the app's secret file: the app puts its secret into the
+    /// VPN profile and the extension sets it here before building the config.
+    static var secretOverride: String?
     static var clashSecret: String {
+        if let o = secretOverride, o.count >= 16 { return o }
         let url = container.appendingPathComponent("api-secret")
         if let s = try? String(contentsOf: url, encoding: .utf8), s.count >= 16 { return s }
         let bytes = (0..<18).map { _ in UInt8.random(in: 0...255) } // SystemRandomNumberGenerator: CSPRNG

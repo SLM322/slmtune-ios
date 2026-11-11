@@ -122,9 +122,11 @@ final class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoco
 
     // MARK: Network
 
-    func usePlatformAutoDetectControl() -> Bool { true }
+    /// false, as in sing-box for Apple: sing-box itself binds every outgoing socket to the physical interface
+    /// (IP_BOUND_IF) reported by the monitor below. With true and an empty control nothing was bound, and
+    /// connections to the server could be routed back into the tunnel.
+    func usePlatformAutoDetectControl() -> Bool { false }
 
-    /// Sockets opened inside a Network Extension never loop back into its own tunnel: nothing to bind.
     func autoDetectControl(_ fd: Int32) throws {}
 
     func startDefaultInterfaceMonitor(_ listener: LibboxInterfaceUpdateListenerProtocol?) throws {

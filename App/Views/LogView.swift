@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Журнал: sing-box, the extra cores and Tor, from the App Group log files the extension writes.
 struct LogView: View {
+    @EnvironmentObject var vpn: VPNController
     @State private var lines: [LogLine] = []
     @State private var filter = ""
     @State private var onlyProblems = false
@@ -43,15 +44,18 @@ struct LogView: View {
                     Toggle("Только ошибки и предупреждения", isOn: $onlyProblems)
                     Toggle("Следить за концом", isOn: $follow)
                     ShareLink(item: shown.map(\.text).joined(separator: "\n")) { Label("Поделиться", systemImage: "square.and.arrow.up") }
-                    Button(role: .destructive) { SharedLog.clear(); lines = [] } label: { Label("Очистить", systemImage: "trash") }
+                    Button(role: .destructive) { vpn.clearLog(); lines = [] } label: { Label("Очистить", systemImage: "trash") }
                 } label: { Image(systemName: "ellipsis.circle") }
             }
         }
     }
 
     private func reload() {
-        let fresh = SharedLog.tail()
-        // Keep ids stable when nothing changed, so the list doesn't jump.
-        if fresh.map(\.text) != lines.map(\.text) { lines = fresh }
+        Task {
+            // Without a shared App Group the files live in the extension: it sends them while connected.
+            let fresh = await vpn.fetchLog() ?? SharedLog.tail()
+            // Keep ids stable when nothing changed, so the list doesn't jump.
+            if fresh.map(\.text) != lines.map(\.text), !(fresh.isEmpty && !AppGroup.isShared) { lines = fresh }
+        }
     }
 }

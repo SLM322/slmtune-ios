@@ -18,6 +18,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         do {
             try? FileManager.default.removeItem(at: AppGroup.lastErrorFile)
             SharedLog.trim()
+            let stored = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
+            if !AppGroup.isShared {
+                AppGroup.secretOverride = stored?["secret"] as? String
+                fetchListsIfMissing()
+            }
+            SharedLog.append("tunnel", "start: App Group \(AppGroup.isShared ? "shared" : "not shared (settings from the VPN profile)")")
             try setupLibbox()
             let config = try buildConfig()
             let platform = ExtensionPlatformInterface(self)
@@ -59,6 +65,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         case "reload":
             do { try reload(); completionHandler?(Data("ok".utf8)) }
             catch { completionHandler?(Data(error.localizedDescription.utf8)) }
+        case "log":
+            // Журнал without a shared App Group: "source\ttext" lines.
+            let text = SharedLog.tail(maxBytes: 60_000).map { "\($0.source)\t\($0.text)" }.joined(separator: "\n")
+            completionHandler?(Data(text.utf8))
+        case "clear-log":
+            SharedLog.clear()
+            completionHandler?(Data("ok".utf8))
         default:
             completionHandler?(nil)
         }
@@ -86,6 +99,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         o.workingPath = AppGroup.workingDir.path
         o.tempPath = AppGroup.tempDir.path
         o.logMaxLines = 2000
+        // iOS kills a Network Extension above ~50 MB: keep Go's heap under the limit (GC tuned by libbox).
+        o.oomKillerEnabled = true
         o.appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
         o.appMarketingVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         var error: NSError?
@@ -101,6 +116,20 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         if let s = sentSettings { return s }
         let stored = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration?["settings"] as? Data
         return SettingsFile.decode(stored) ?? SettingsFile.load()
+    }
+
+    /// Without a shared App Group the lists the app downloaded are out of reach: the extension gets its own.
+    /// Waits a few seconds on the first start (the preset needs them), then finishes in the background.
+    private func fetchListsIfMissing() {
+        let s = loadSettings()
+        let missing = Lists.presetLists(s.preset).contains { !Lists.has(Lists.ruleFile($0)) }
+        let done = DispatchSemaphore(value: 0)
+        Task.detached { [weak self] in
+            let n = await Lists.update(s)
+            done.signal()
+            if n > 0 { try? self?.reload() } // no-op until sing-box runs: the first config is built after the wait
+        }
+        if missing { _ = done.wait(timeout: .now() + 8) }
     }
 
     private func buildConfig() throws -> String {
