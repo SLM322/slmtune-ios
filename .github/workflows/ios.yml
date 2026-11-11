@@ -193,6 +193,75 @@ jobs:
           gh release create unsigned build/SLMtune-unsigned.ipa build/SLMtune.entitlements build/PacketTunnel.entitlements \
             --title "SLMtune (unsigned, build ${{ github.run_number }})" --notes-file notes.md --prerelease --target "$GITHUB_SHA"
 
+  # sing-box alone, without Xray / mihomo / Tor: a much smaller VPN extension (iOS kills one above ~50 MB).
+  lite-ipa:
+    name: Unsigned lite IPA (sing-box only)
+    if: github.event_name != 'pull_request'
+    runs-on: macos-26
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Cache the lite Libbox.xcframework
+        id: libbox-cache
+        uses: actions/cache@v4
+        with:
+          path: Frameworks/Libbox.xcframework
+          key: libbox-lite-${{ hashFiles('core/go.mod', 'core/go.sum', 'scripts/build-libbox.sh') }}
+
+      - uses: actions/setup-go@v5
+        if: steps.libbox-cache.outputs.cache-hit != 'true'
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - name: Build Libbox.xcframework (sing-box only, device)
+        if: steps.libbox-cache.outputs.cache-hit != 'true'
+        run: LITE=1 PLATFORMS=ios bash scripts/build-libbox.sh
+
+      - name: Generate the Xcode project without Tor
+        run: |
+          brew install xcodegen
+          python3 - <<'EOF'
+          import re
+          p = open('project.yml').read()
+          p2 = p.replace("      - package: TorFramework\n        product: CTor\n", "")
+          assert p2 != p
+          open('project.yml', 'w').write(p2)
+          EOF
+          xcodegen generate
+
+      - name: Build for iPhone without signing
+        run: |
+          xcodebuild archive \
+            -project SLMtune.xcodeproj -scheme SLMtune -configuration Release \
+            -destination "generic/platform=iOS" -archivePath build/SLMtune.xcarchive \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) SLM_LITE' \
+            > archive.log 2>&1 || { grep -E "error:" archive.log | sort -u | head -60; tail -40 archive.log; exit 1; }
+          mkdir -p build/ipa/Payload
+          cp -R build/SLMtune.xcarchive/Products/Applications/SLMtune.app build/ipa/Payload/
+          ls -la build/ipa/Payload/SLMtune.app/PlugIns/PacketTunnel.appex/PacketTunnel
+          (cd build/ipa && zip -qry ../SLMtune-lite-unsigned.ipa Payload)
+          ls -la build/SLMtune-lite-unsigned.ipa
+
+      - name: Publish as the "unsigned-lite" release
+        run: |
+          gh release delete unsigned-lite --yes --cleanup-tag 2>/dev/null || true
+          printf '%s\n' "Облегчённая неподписанная сборка ($(git rev-parse --short HEAD), сборка ${{ github.run_number }}): только sing-box, без Xray, mihomo, TrustTunnel и Tor. Расширение VPN в несколько раз меньше." > notes.md
+          gh release create unsigned-lite build/SLMtune-lite-unsigned.ipa \
+            --title "SLMtune lite (unsigned, build ${{ github.run_number }})" --notes-file notes.md --prerelease --target "$GITHUB_SHA"
+
   testflight:
     name: Sign and upload to TestFlight
     needs: build-test

@@ -26,6 +26,11 @@ TAGS="with_gvisor,with_quic,with_wireguard,with_utls,with_naive_outbound,with_cl
 TAGS="$TAGS,with_dhcp,grpcnotrace,with_low_memory"
 LDFLAGS="-X github.com/sagernet/sing-box/constant.Version=${SING_BOX_VERSION#v} -X runtime.godebugDefault=multipathtcp=0,tlssha1=1 -checklinkname=0 -s -w -buildid="
 
+# LITE=1: sing-box alone (no Xray / mihomo / Tor transports) — a much smaller extension; build the app with
+# SWIFT_ACTIVE_COMPILATION_CONDITIONS=SLM_LITE.
+PACKAGES="github.com/sagernet/sing-box/experimental/libbox github.com/slmtune/slmtune-ios/core"
+if [ "${LITE:-0}" = "1" ]; then PACKAGES="github.com/sagernet/sing-box/experimental/libbox"; fi
+
 mkdir -p "$ROOT/Frameworks"
 rm -rf "$ROOT/Frameworks/Libbox.xcframework"
 cd "$ROOT/core"
@@ -37,8 +42,7 @@ gomobile bind -v \
   -tags "$TAGS" \
   -ldflags "$LDFLAGS" \
   -o "$ROOT/Frameworks/Libbox.xcframework" \
-  github.com/sagernet/sing-box/experimental/libbox \
-  github.com/slmtune/slmtune-ios/core
+  $PACKAGES
 
-echo "Готово: $ROOT/Frameworks/Libbox.xcframework (sing-box $SING_BOX_VERSION + Xray + mihomo + Tor transports)"
+echo "Готово: $ROOT/Frameworks/Libbox.xcframework (sing-box $SING_BOX_VERSION; пакеты: $PACKAGES)"
 echo "Сверьте протоколы: $ROOT/Frameworks/Libbox.xcframework/ios-arm64/Libbox.framework/Headers/"

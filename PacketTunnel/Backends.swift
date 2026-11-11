@@ -4,11 +4,25 @@ import os
 #if canImport(VpnClientFramework)
 import VpnClientFramework
 #endif
-#if canImport(CTor)
+#if canImport(CTor) && !SLM_LITE
 import CTor
 import TorCore
 #endif
 
+#if SLM_LITE
+/// The "lite" build (LITE=1 scripts/build-libbox.sh): sing-box alone, a much smaller extension. Servers that need
+/// another core (VLESS XHTTP, AmneziaWG, mieru, SSR, TrustTunnel, Tor) say so instead of connecting.
+final class Backends {
+    func start(_ settings: AppSettings, _ server: Server) throws -> [String: Int] {
+        guard let s = Engines.backends(settings, server).first else { return [:] }
+        throw NSError(domain: "SLMtune", code: 3, userInfo: [NSLocalizedDescriptionKey:
+            L("«%@»: этому протоколу нужно дополнительное ядро, которого нет в облегчённой сборке.", s.title)])
+    }
+    func stop() {}
+    func sleep() {}
+    func wake() {}
+}
+#else
 /// Starts the extra cores in this process before sing-box and stops them after (see Shared/Engines.swift).
 /// Each listens on 127.0.0.1; the returned map (server id → port) goes into ConfigBuilder.build.
 final class Backends {
@@ -195,3 +209,4 @@ final class CoreLog: NSObject, SlmcoreLogWriterProtocol {
         SharedLog.append("core", line)
     }
 }
+#endif
