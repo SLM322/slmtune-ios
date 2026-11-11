@@ -66,8 +66,7 @@ final class VPNController: ObservableObject {
             guard !text.isEmpty else { return }
             Task { @MainActor [weak self] in
                 self?.crashReport = text
-                self?.lastError = L("Ядро аварийно завершилось при прошлом запуске:") + "
-" + String(text.prefix(700))
+                self?.lastError = L("Ядро аварийно завершилось при прошлом запуске:") + "\n" + String(text.prefix(700))
                 session.stopVPNTunnel()
             }
         }

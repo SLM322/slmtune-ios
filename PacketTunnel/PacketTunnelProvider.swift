@@ -57,8 +57,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// "Connects" with settings that route nothing, so the app can ask for the report; gives up after a minute.
     private func holdForReport(_ report: String, _ completionHandler: @escaping (Error?) -> Void) {
         crashReport = report
-        for line in report.split(separator: "
-").prefix(200) { SharedLog.append("crash", String(line)) }
+        for line in report.split(separator: "\n").prefix(200) { SharedLog.append("crash", String(line)) }
         let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
         settings.ipv4Settings = NEIPv4Settings(addresses: ["172.19.0.1"], subnetMasks: ["255.255.255.252"])
         setTunnelNetworkSettings(settings) { [weak self] _ in
