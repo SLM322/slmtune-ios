@@ -213,7 +213,7 @@ jobs:
           set -o pipefail
           cd core
           SDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
-          TAGS=$(grep -o '^TAGS="[^$"]*' ../scripts/build-libbox.sh | head -1 | cut -d'"' -f2),with_dhcp,grpcnotrace,with_low_memory,slm_bind
+          TAGS=$(grep -o '^TAGS="[^$"]*' ../scripts/build-libbox.sh | head -1 | cut -d'"' -f2),with_dhcp,grpcnotrace,with_low_memory,slm_bind,iossimulator
           if [ "$(uname -m)" = "arm64" ]; then export GOARCH=arm64; T=arm64-apple-ios17.0-simulator; else export GOARCH=amd64; T=x86_64-apple-ios17.0-simulator; fi
           export CGO_ENABLED=1 GOOS=ios
           export CC="$(xcrun --sdk iphonesimulator -f clang) -target $T -isysroot $SDK"
