@@ -23,7 +23,9 @@ export PATH="$(go env GOPATH)/bin:$PATH"
 
 SING_BOX_VERSION="$(cd "$ROOT/core" && go list -m -f '{{.Version}}' github.com/sagernet/sing-box)"
 TAGS="with_gvisor,with_quic,with_wireguard,with_utls,with_naive_outbound,with_clash_api,badlinkname,tfogo_checklinkname0"
-TAGS="$TAGS,with_dhcp,grpcnotrace,with_low_memory"
+# no_tailscale: mihomo's own Tailscale fork (metacubex/tailscale) registers the same expvar names as sing-box's
+# (sagernet/tailscale) — together they panic in init and the extension dies at launch.
+TAGS="$TAGS,with_dhcp,grpcnotrace,with_low_memory,no_tailscale"
 LDFLAGS="-X github.com/sagernet/sing-box/constant.Version=${SING_BOX_VERSION#v} -X runtime.godebugDefault=multipathtcp=0,tlssha1=1 -checklinkname=0 -s -w -buildid="
 
 # LITE=1: sing-box alone (no Xray / mihomo / Tor transports) — a much smaller extension; build the app with
