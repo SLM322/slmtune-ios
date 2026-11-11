@@ -18,6 +18,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         do {
             try? FileManager.default.removeItem(at: AppGroup.lastErrorFile)
             SharedLog.trim()
+            // The last run died inside a Go core: don't run it again, hand its last words to the app.
+            if let report = CrashCapture.takePrevious() {
+                holdForReport(report, completionHandler)
+                return
+            }
+            CrashCapture.redirectStderr()
             let stored = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
             if !AppGroup.isShared {
                 AppGroup.secretOverride = stored?["secret"] as? String
@@ -45,6 +51,24 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
+    /// A crash report from the previous run, kept while the app fetches it ("crash" message).
+    private var crashReport: String?
+
+    /// "Connects" with settings that route nothing, so the app can ask for the report; gives up after a minute.
+    private func holdForReport(_ report: String, _ completionHandler: @escaping (Error?) -> Void) {
+        crashReport = report
+        for line in report.split(separator: "
+").prefix(200) { SharedLog.append("crash", String(line)) }
+        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
+        settings.ipv4Settings = NEIPv4Settings(addresses: ["172.19.0.1"], subnetMasks: ["255.255.255.252"])
+        setTunnelNetworkSettings(settings) { [weak self] _ in
+            completionHandler(nil)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 60) {
+                if self?.crashReport != nil { self?.cancelTunnelWithError(self?.fail(L("Ядро аварийно завершилось при прошлом запуске."))) }
+            }
+        }
+    }
+
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         stopLibbox()
         completionHandler()
@@ -65,6 +89,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         case "reload":
             do { try reload(); completionHandler?(Data("ok".utf8)) }
             catch { completionHandler?(Data(error.localizedDescription.utf8)) }
+        case "crash":
+            completionHandler?(Data((crashReport ?? "").utf8))
         case "log":
             // Журнал without a shared App Group: "source\ttext" lines.
             let text = SharedLog.tail(maxBytes: 60_000).map { "\($0.source)\t\($0.text)" }.joined(separator: "\n")

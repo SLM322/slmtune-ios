@@ -22,6 +22,11 @@ struct HomeView: View {
                     }
                     if let e = vpn.lastError {
                         Text(e).font(.footnote).foregroundStyle(Slm.err).multilineTextAlignment(.center).padding(.horizontal)
+                            .textSelection(.enabled)
+                        if let report = vpn.crashReport {
+                            ShareLink(item: report) { Label("Поделиться отчётом", systemImage: "square.and.arrow.up") }
+                                .font(.footnote)
+                        }
                     }
                     serverCard
                     if vpn.status == .connected { speedCard }

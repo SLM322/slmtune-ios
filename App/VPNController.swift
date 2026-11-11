@@ -40,7 +40,8 @@ final class VPNController: ObservableObject {
         if status != c.status { WidgetCenter.shared.reloadAllTimelines() }
         status = c.status
         connectedSince = c.status == .connected ? c.connectedDate : nil
-        guard c.status == .disconnected else { return }
+        if c.status == .connected { askForCrashReport(c) }
+        guard c.status == .disconnected, crashReport == nil else { return }
         if let e = try? String(contentsOf: AppGroup.lastErrorFile, encoding: .utf8), !e.isEmpty {
             lastError = e
         } else {
@@ -49,6 +50,25 @@ final class VPNController: ObservableObject {
             c.fetchLastDisconnectError { [weak self] error in
                 guard let error = error as NSError? else { return } // nil when the user stopped it
                 Task { @MainActor in self?.lastError = Self.describe(error) }
+            }
+        }
+    }
+
+    /// The whole text of the core's crash at the previous start, for "Поделиться" on the main screen.
+    @Published var crashReport: String?
+
+    /// After a core crashed, the next start only holds its report (PacketTunnelProvider.holdForReport): fetch it,
+    /// show it and stop that placeholder tunnel.
+    private func askForCrashReport(_ c: NEVPNConnection) {
+        guard let session = c as? NETunnelProviderSession else { return }
+        try? session.sendProviderMessage(Data("crash".utf8)) { data in
+            let text = String(decoding: data ?? Data(), as: UTF8.self)
+            guard !text.isEmpty else { return }
+            Task { @MainActor [weak self] in
+                self?.crashReport = text
+                self?.lastError = L("Ядро аварийно завершилось при прошлом запуске:") + "
+" + String(text.prefix(700))
+                session.stopVPNTunnel()
             }
         }
     }
@@ -113,6 +133,7 @@ final class VPNController: ObservableObject {
 
     func connect(_ s: AppSettings) async {
         lastError = nil
+        crashReport = nil
         guard s.activeServer != nil else { lastError = L("Сначала добавьте сервер."); return }
         do {
             let m = try await prepare(s)
