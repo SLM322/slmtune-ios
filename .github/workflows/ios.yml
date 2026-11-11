@@ -193,6 +193,45 @@ jobs:
           gh release create unsigned build/SLMtune-unsigned.ipa build/SLMtune.entitlements build/PacketTunnel.entitlements \
             --title "SLMtune (unsigned, build ${{ github.run_number }})" --notes-file notes.md --prerelease --target "$GITHUB_SHA"
 
+  # The Go side as an iOS program: every package's init runs, then libbox.Setup. A panic here is what kills the
+  # extension on the phone at launch, and here its text is visible.
+  go-init:
+    name: Go cores start as an iOS binary (simulator)
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+      - name: Build and run on the simulator
+        run: |
+          set -o pipefail
+          cd core
+          SDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
+          TAGS=$(grep -o '^TAGS="[^$"]*' ../scripts/build-libbox.sh | head -1 | cut -d'"' -f2),with_dhcp,grpcnotrace,with_low_memory,slm_bind
+          export CGO_ENABLED=1 GOOS=ios GOARCH=arm64
+          export CC="$(xcrun --sdk iphonesimulator -f clang) -target arm64-apple-ios17.0-simulator -isysroot $SDK"
+          export CGO_CFLAGS="-target arm64-apple-ios17.0-simulator -isysroot $SDK" CGO_LDFLAGS="-target arm64-apple-ios17.0-simulator -isysroot $SDK"
+          for variant in full lite; do
+            go build -trimpath -tags "$TAGS" -ldflags "-checklinkname=0 -s -w" -o "/tmp/init-$variant" "./internal/inittest/$variant"
+            ls -la "/tmp/init-$variant"
+          done
+          ID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
+          xcrun simctl boot "$ID" || true
+          xcrun simctl bootstatus "$ID" -b
+          status=0
+          for variant in lite full; do
+            echo "::group::$variant"
+            xcrun simctl spawn "$ID" "/tmp/init-$variant" 2>&1 | tail -80 || { echo "FAILED: $variant"; status=1; }
+            echo "::endgroup::"
+          done
+          exit $status
+
   # sing-box alone, without Xray / mihomo / Tor: a much smaller VPN extension (iOS kills one above ~50 MB).
   lite-ipa:
     name: Unsigned lite IPA (sing-box only)
