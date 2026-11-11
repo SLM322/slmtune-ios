@@ -39,7 +39,7 @@ env:
 jobs:
   cores:
     name: Cores (sing-box + Xray + mihomo + Tor transports, TrustTunnel)
-    runs-on: macos-26
+    runs-on: macos-15-intel  # x86 pool: the arm64 macOS runners are short of capacity (cross-builds for arm64 devices)
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -135,9 +135,9 @@ jobs:
 
   unsigned-ipa:
     name: Unsigned IPA (sign it yourself)
-    needs: build-test
+    needs: cores  # not build-test: the IPA should not wait for a simulator runner
     if: github.event_name != 'pull_request'
-    runs-on: macos-26
+    runs-on: macos-15-intel  # x86 pool: the arm64 macOS runners are short of capacity (cross-builds for arm64 devices)
     timeout-minutes: 45
     permissions:
       contents: write # the rolling "unsigned" release
@@ -237,7 +237,7 @@ jobs:
   lite-ipa:
     name: Unsigned lite IPA (sing-box only)
     if: github.event_name != 'pull_request'
-    runs-on: macos-26
+    runs-on: macos-15-intel  # x86 pool: the arm64 macOS runners are short of capacity (cross-builds for arm64 devices)
     timeout-minutes: 60
     permissions:
       contents: write
