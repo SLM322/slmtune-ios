@@ -197,7 +197,7 @@ jobs:
   # extension on the phone at launch, and here its text is visible.
   go-init:
     name: Go cores start as an iOS binary (simulator)
-    runs-on: macos-26
+    runs-on: macos-15-intel  # x86 pool: the arm64 macOS runners are short of capacity
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -214,9 +214,10 @@ jobs:
           cd core
           SDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
           TAGS=$(grep -o '^TAGS="[^$"]*' ../scripts/build-libbox.sh | head -1 | cut -d'"' -f2),with_dhcp,grpcnotrace,with_low_memory,slm_bind
-          export CGO_ENABLED=1 GOOS=ios GOARCH=arm64
-          export CC="$(xcrun --sdk iphonesimulator -f clang) -target arm64-apple-ios17.0-simulator -isysroot $SDK"
-          export CGO_CFLAGS="-target arm64-apple-ios17.0-simulator -isysroot $SDK" CGO_LDFLAGS="-target arm64-apple-ios17.0-simulator -isysroot $SDK"
+          if [ "$(uname -m)" = "arm64" ]; then export GOARCH=arm64; T=arm64-apple-ios17.0-simulator; else export GOARCH=amd64; T=x86_64-apple-ios17.0-simulator; fi
+          export CGO_ENABLED=1 GOOS=ios
+          export CC="$(xcrun --sdk iphonesimulator -f clang) -target $T -isysroot $SDK"
+          export CGO_CFLAGS="-target $T -isysroot $SDK" CGO_LDFLAGS="-target $T -isysroot $SDK"
           for variant in full lite; do
             go build -trimpath -tags "$TAGS" -ldflags "-checklinkname=0 -s -w" -o "/tmp/init-$variant" "./internal/inittest/$variant"
             ls -la "/tmp/init-$variant"
