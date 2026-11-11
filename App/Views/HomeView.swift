@@ -21,7 +21,9 @@ struct HomeView: View {
                         Text(since, style: .timer).font(.footnote.monospacedDigit()).foregroundStyle(Slm.text3)
                     }
                     if let e = vpn.lastError {
-                        Text(e).font(.footnote).foregroundStyle(Slm.err).multilineTextAlignment(.center).padding(.horizontal)
+                        Text(verbatim: e).font(vpn.crashReport == nil ? .footnote : .caption2.monospaced())
+                            .foregroundStyle(Slm.err)
+                            .multilineTextAlignment(vpn.crashReport == nil ? .center : .leading).padding(.horizontal)
                             .textSelection(.enabled)
                         if let report = vpn.crashReport {
                             ShareLink(item: report) { Label("Поделиться отчётом", systemImage: "square.and.arrow.up") }

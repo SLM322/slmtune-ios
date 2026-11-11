@@ -30,8 +30,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 fetchListsIfMissing()
             }
             SharedLog.append("tunnel", "start: App Group \(AppGroup.isShared ? "shared" : "not shared (settings from the VPN profile)")")
+            let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+            CrashCapture.stage("start: сборка \(build), App Group \(AppGroup.isShared ? "общий" : "нет"), сервер \(loadSettings().activeServer?.kind ?? "нет")")
             try setupLibbox()
+            CrashCapture.stage("libbox setup")
             let config = try buildConfig()
+            CrashCapture.stage("config: \(config.utf8.count) байт")
             let platform = ExtensionPlatformInterface(self)
             self.platform = platform
             var error: NSError?
@@ -40,9 +44,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             }
             try server.start()
             commandServer = server
+            CrashCapture.stage("command server")
             try server.startOrReloadService(config, options: LibboxOverrideOptions())
+            CrashCapture.running()
             completionHandler(nil)
         } catch {
+            CrashCapture.finish()
             log.error("start failed: \(error.localizedDescription, privacy: .public)")
             SharedLog.append("error", error.localizedDescription)
             try? Data(error.localizedDescription.utf8).write(to: AppGroup.lastErrorFile, options: .atomic)
@@ -69,6 +76,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
+        CrashCapture.finish()
         stopLibbox()
         completionHandler()
     }

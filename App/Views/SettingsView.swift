@@ -95,8 +95,12 @@ struct SettingsView: View {
                 Button("Язык приложения") {
                     if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) }
                 }
-                LabeledContent("Версия", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")
-                LabeledContent("Ядра", value: "sing-box · Xray · mihomo · TrustTunnel · Tor")
+                LabeledContent("Версия", value: Diagnostics.version)
+                LabeledContent("Ядра", value: Diagnostics.cores)
+                DisclosureGroup("Диагностика") {
+                    Text(verbatim: Diagnostics.text).font(.caption.monospaced()).textSelection(.enabled)
+                    ShareLink(item: Diagnostics.text) { Label("Поделиться", systemImage: "square.and.arrow.up") }
+                }
                 Link("sing-box (GPL-3.0)", destination: URL(string: "https://github.com/SagerNet/sing-box")!)
             } header: {
                 Text("О приложении")
