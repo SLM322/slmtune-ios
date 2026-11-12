@@ -192,7 +192,7 @@ jobs:
           gh release delete unsigned --yes --cleanup-tag 2>/dev/null || true
           printf '%s\n\n%s\n' \
             "Неподписанная сборка с последнего коммита ($(git rev-parse --short HEAD), сборка ${{ github.run_number }})." \
-            "Подпишите своим сертификатом (ESign, Feather, Scarlet, zsign). VPN работает, только если в профиле подписи есть разрешение Network Extension (packet-tunnel-provider) — см. docs/GITHUB.md." > notes.md
+            "Полная сборка: sing-box + Xray + mihomo. На iPhone пока не проверена — если не нужны XHTTP, AmneziaWG, mieru и ShadowsocksR, берите проверенную облегчённую: https://github.com/SLM322/slmtune-ios/releases/tag/unsigned-lite. Подпишите своим сертификатом (ESign, Feather, Scarlet, zsign). VPN работает, только если в профиле подписи есть разрешение Network Extension (packet-tunnel-provider); App Group берётся из профиля сам — см. docs/GITHUB.md. Не подключается — Настройки → Диагностика → «Собрать отчёт»." > notes.md
           gh release create unsigned build/SLMtune-unsigned.ipa build/SLMtune.entitlements build/PacketTunnel.entitlements \
             --title "SLMtune (unsigned, build ${{ github.run_number }})" --notes-file notes.md --prerelease --target "$GITHUB_SHA"
 
@@ -295,7 +295,7 @@ jobs:
       - name: Publish as the "unsigned-lite" release
         run: |
           gh release delete unsigned-lite --yes --cleanup-tag 2>/dev/null || true
-          printf '%s\n' "Облегчённая неподписанная сборка ($(git rev-parse --short HEAD), сборка ${{ github.run_number }}): только sing-box, без Xray, mihomo, TrustTunnel и Tor. Расширение VPN в несколько раз меньше." > notes.md
+          printf '%s\n' "Облегчённая неподписанная сборка ($(git rev-parse --short HEAD), сборка ${{ github.run_number }}): только sing-box, без Xray, mihomo, TrustTunnel и Tor. Проверена на iPhone (iOS 27.2, купленная подпись). Хватает для VLESS, VMess, Trojan, Shadowsocks, ShadowTLS, Hysteria2, TUIC, AnyTLS, NaiveProxy, WireGuard, SOCKS5. Подпишите своим сертификатом; нужен профиль с Network Extension (packet-tunnel-provider), App Group берётся из профиля сам — см. docs/GITHUB.md. Не подключается — Настройки → Диагностика → «Собрать отчёт»." > notes.md
           gh release create unsigned-lite build/SLMtune-lite-unsigned.ipa \
             --title "SLMtune lite (unsigned, build ${{ github.run_number }})" --notes-file notes.md --prerelease --target "$GITHUB_SHA"
 
