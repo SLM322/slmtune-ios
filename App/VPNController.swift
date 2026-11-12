@@ -66,7 +66,8 @@ final class VPNController: ObservableObject {
             guard !text.isEmpty else { return }
             Task { @MainActor [weak self] in
                 self?.crashReport = text
-                self?.lastError = L("Прошлый запуск VPN оборвался:") + "\n" + String(text.prefix(1800))
+                let body = String(text.prefix(1800))
+                self?.lastError = text.hasPrefix("Ошибка запуска") ? body : L("Прошлый запуск VPN оборвался:") + "\n" + body
                 session.stopVPNTunnel()
             }
         }

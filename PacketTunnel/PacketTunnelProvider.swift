@@ -54,7 +54,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             SharedLog.append("error", error.localizedDescription)
             try? Data(error.localizedDescription.utf8).write(to: AppGroup.lastErrorFile, options: .atomic)
             stopLibbox()
-            completionHandler(error)
+            if AppGroup.isShared {
+                completionHandler(error)
+            } else {
+                // The app can't read last-error.txt and iOS replaces our error with "internal error" (12):
+                // hand the text over the same way as a crash report.
+                holdForReport("Ошибка запуска: " + error.localizedDescription, completionHandler)
+            }
         }
     }
 
@@ -132,6 +138,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         o.workingPath = AppGroup.workingDir.path
         o.tempPath = AppGroup.tempDir.path
         o.logMaxLines = 2000
+        // libbox's command server listens on <basePath>/command.sock, and a Unix socket path can't exceed 103 bytes.
+        // The App Group folder fits; the extension's own container (a build re-signed without the group) doesn't,
+        // and the start fails with "listen command server: bind: invalid argument". Use loopback TCP there.
+        if o.basePath.utf8.count + "/command.sock".utf8.count > 103 {
+            o.commandServerListenPort = 19091
+            o.commandServerSecret = AppGroup.clashSecret
+        }
         // iOS kills a Network Extension above ~50 MB: keep Go's heap under the limit (GC tuned by libbox).
         o.oomKillerEnabled = true
         o.appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
