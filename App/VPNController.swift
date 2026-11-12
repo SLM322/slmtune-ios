@@ -166,7 +166,7 @@ final class VPNController: ObservableObject {
         if #available(iOS 17.4, *) { p.excludeDeviceCommunication = true }
         p.enforceRoutes = false
         // A copy of the settings for an extension that can't see the App Group (re-signed builds).
-        p.providerConfiguration = AppGroup.isShared ? nil : ["settings": SettingsFile.encoded(s), "secret": AppGroup.clashSecret]
+        p.providerConfiguration = ["settings": SettingsFile.encoded(s), "secret": AppGroup.clashSecret]
         m.protocolConfiguration = p
         m.localizedDescription = "SLMtune"
         m.isEnabled = true
@@ -211,9 +211,9 @@ final class VPNController: ObservableObject {
     func reload(_ s: AppSettings) async {
         guard let session = manager?.connection as? NETunnelProviderSession, status == .connected else { return }
         // Without a shared App Group the extension can't read settings.json: send the settings themselves.
-        let message = AppGroup.isShared ? Data("reload".utf8) : SettingsFile.encoded(s)
+        let message = SettingsFile.encoded(s)
         try? session.sendProviderMessage(message) { _ in }
-        if !AppGroup.isShared { _ = try? await prepare(s) } // and keep the profile's copy current for the next start
+        _ = try? await prepare(s) // and keep the profile's copy current for the next start
     }
 
     func removeProfile() async {
