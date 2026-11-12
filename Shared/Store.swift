@@ -6,7 +6,31 @@ import Security
 /// The App Group shared by the app and the Packet Tunnel extension. Must match both .entitlements files
 /// and Config/Signing.xcconfig (APP_GROUP).
 enum AppGroup {
-    static let id: String = Bundle.main.object(forInfoDictionaryKey: "SLMAppGroup") as? String ?? "group.com.slmtune.ios"
+    /// Our own group, or — in a build re-signed with someone else's profile — the first group that profile grants
+    /// and this process can really open. The app and the extension read the same profile (the app's), in the same
+    /// order, so they land on the same group.
+    static let id: String = {
+        let declared = Bundle.main.object(forInfoDictionaryKey: "SLMAppGroup") as? String ?? "group.com.slmtune.ios"
+        #if os(iOS)
+        let fm = FileManager.default
+        if fm.containerURL(forSecurityApplicationGroupIdentifier: declared) != nil { return declared }
+        for g in profileGroups() where fm.containerURL(forSecurityApplicationGroupIdentifier: g) != nil { return g }
+        #endif
+        return declared
+    }()
+
+    /// App Groups listed in the app's embedded.mobileprovision (an extension looks in the app that contains it).
+    private static func profileGroups() -> [String] {
+        var bundle = Bundle.main.bundleURL
+        if bundle.pathExtension == "appex" { bundle = bundle.deletingLastPathComponent().deletingLastPathComponent() }
+        guard let raw = try? Data(contentsOf: bundle.appendingPathComponent("embedded.mobileprovision")),
+              let from = raw.range(of: Data("<?xml".utf8)),
+              let to = raw.range(of: Data("</plist>".utf8)),
+              let plist = try? PropertyListSerialization.propertyList(from: raw[from.lowerBound..<to.upperBound], format: nil) as? [String: Any],
+              let e = plist["Entitlements"] as? [String: Any]
+        else { return [] }
+        return (e["com.apple.security.application-groups"] as? [String] ?? []).sorted()
+    }
 
     static var container: URL {
         #if os(iOS) || os(macOS)

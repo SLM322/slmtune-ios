@@ -55,29 +55,27 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             SharedLog.append("error", error.localizedDescription)
             try? Data(error.localizedDescription.utf8).write(to: AppGroup.lastErrorFile, options: .atomic)
             stopLibbox()
-            if AppGroup.isShared {
-                completionHandler(error)
-            } else {
-                // The app can't read last-error.txt and iOS replaces our error with "internal error" (12):
-                // hand the text over the same way as a crash report.
-                holdForReport("Ошибка запуска: " + error.localizedDescription + "\n\nЭтапы запуска:\n" + stages, completionHandler)
-            }
+            // iOS replaces an error given to the start's completion handler with "internal error" (12), and without
+            // a shared folder the app can't read last-error.txt: hand the text over the same way as a crash report.
+            holdForReport("Ошибка запуска: " + error.localizedDescription + "\n\nЭтапы запуска:\n" + stages, completionHandler)
         }
     }
 
     /// A crash report from the previous run, kept while the app fetches it ("crash" message).
     private var crashReport: String?
 
-    /// "Connects" with settings that route nothing, so the app can ask for the report; gives up after a minute.
+    /// "Connects" with settings that route nothing and at once stops with the report as the error: unlike an error
+    /// from the start itself, the reason a running tunnel stopped does reach the app (fetchLastDisconnectError).
     private func holdForReport(_ report: String, _ completionHandler: @escaping (Error?) -> Void) {
         crashReport = report
         for line in report.split(separator: "\n").prefix(200) { SharedLog.append("crash", String(line)) }
+        try? Data(report.utf8).write(to: AppGroup.lastErrorFile, options: .atomic)
         let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
         settings.ipv4Settings = NEIPv4Settings(addresses: ["172.19.0.1"], subnetMasks: ["255.255.255.252"])
         setTunnelNetworkSettings(settings) { [weak self] _ in
             completionHandler(nil)
-            DispatchQueue.global().asyncAfter(deadline: .now() + 60) {
-                if self?.crashReport != nil { self?.cancelTunnelWithError(self?.fail(L("Ядро аварийно завершилось при прошлом запуске."))) }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 1.5) {
+                self?.cancelTunnelWithError(self?.fail(String(report.prefix(1800))))
             }
         }
     }

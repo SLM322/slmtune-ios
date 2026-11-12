@@ -43,13 +43,22 @@ final class VPNController: ObservableObject {
         if c.status == .connected { askForCrashReport(c) }
         guard c.status == .disconnected, crashReport == nil else { return }
         if let e = try? String(contentsOf: AppGroup.lastErrorFile, encoding: .utf8), !e.isEmpty {
-            lastError = e
+            lastError = String(e.prefix(1800))
+            crashReport = e
         } else {
             // No shared App Group (re-signed build), or the extension died before writing the file:
             // ask the system why the tunnel stopped.
             c.fetchLastDisconnectError { [weak self] error in
                 guard let error = error as NSError? else { return } // nil when the user stopped it
-                Task { @MainActor in self?.lastError = Self.describe(error) }
+                Task { @MainActor in
+                    if error.domain == "SLMtune" {
+                        // The extension's own words (a start error or the previous run's report), not a system code.
+                        self?.lastError = error.localizedDescription
+                        self?.crashReport = error.localizedDescription
+                    } else {
+                        self?.lastError = Self.describe(error)
+                    }
+                }
             }
         }
     }
