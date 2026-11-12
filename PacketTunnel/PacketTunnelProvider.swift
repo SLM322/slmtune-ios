@@ -14,7 +14,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var platform: ExtensionPlatformInterface?
     private let backends = Backends()
 
+    /// Start, stop and reload run here, never on the queue the system calls us on: sing-box waits inside them for
+    /// setTunnelNetworkSettings to finish (openTun), and that answer arrives on the system queue — blocking it
+    /// hangs the start until iOS kills the extension a minute later.
+    private let work = DispatchQueue(label: "slmtune.tunnel")
+
     override func startTunnel(options: [String: NSObject]? = nil, completionHandler: @escaping (Error?) -> Void) {
+        work.async { self.start(completionHandler) }
+    }
+
+    private func start(_ completionHandler: @escaping (Error?) -> Void) {
         do {
             try? FileManager.default.removeItem(at: AppGroup.lastErrorFile)
             SharedLog.trim()
@@ -81,9 +90,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
-        CrashCapture.finish()
-        stopLibbox()
-        completionHandler()
+        work.async {
+            CrashCapture.finish()
+            self.stopLibbox()
+            completionHandler()
+        }
     }
 
     /// Settings sent by the app when there is no shared App Group (see loadSettings).
@@ -92,15 +103,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// Messages from the app: "reload" (settings changed; without a shared App Group the settings JSON itself).
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
         if messageData.first == UInt8(ascii: "{"), let s = SettingsFile.decode(messageData) {
-            sentSettings = s
-            do { try reload(); completionHandler?(Data("ok".utf8)) }
-            catch { completionHandler?(Data(error.localizedDescription.utf8)) }
+            work.async {
+                self.sentSettings = s
+                do { try self.reload(); completionHandler?(Data("ok".utf8)) }
+                catch { completionHandler?(Data(error.localizedDescription.utf8)) }
+            }
             return
         }
         switch String(decoding: messageData, as: UTF8.self) {
         case "reload":
-            do { try reload(); completionHandler?(Data("ok".utf8)) }
-            catch { completionHandler?(Data(error.localizedDescription.utf8)) }
+            work.async {
+                do { try self.reload(); completionHandler?(Data("ok".utf8)) }
+                catch { completionHandler?(Data(error.localizedDescription.utf8)) }
+            }
         case "crash":
             completionHandler?(Data((crashReport ?? "").utf8))
         case "log":
