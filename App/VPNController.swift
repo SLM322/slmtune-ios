@@ -96,6 +96,45 @@ final class VPNController: ObservableObject {
         }
     }
 
+    /// One text with everything needed to find out why the VPN doesn't work: the signature facts, the profile's
+    /// state, the traffic counters, and the extension's own account (its mode, start steps and log).
+    func diagnosticReport() async -> String {
+        var out = [Diagnostics.text, ""]
+        let names: [NEVPNStatus: String] = [.invalid: "нет профиля", .disconnected: "отключено", .connecting: "подключение",
+                                           .connected: "подключено", .reasserting: "переподключение", .disconnecting: "отключение"]
+        out.append("Статус VPN: \(names[status] ?? "?")")
+        out.append("Последняя ошибка: \(lastError ?? "нет")")
+        let p = manager?.protocolConfiguration as? NETunnelProviderProtocol
+        out.append("Профиль: \(manager == nil ? "нет" : "есть"), настройки в профиле: \((p?.providerConfiguration?["settings"] as? Data)?.count ?? 0) байт, по требованию: \(manager?.isOnDemandEnabled == true ? "да" : "нет")")
+        let a = TrafficMonitor.counters()
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        let b = TrafficMonitor.counters()
+        out.append("utun за 2 с: принято \(b.0 &- a.0) байт, отправлено \(b.1 &- a.1) байт")
+        out.append("")
+        out.append("Ответ расширения:")
+        out.append(await ask("diag") ?? "НЕТ ОТВЕТА (расширение не запущено или не отвечает на сообщения)")
+        return out.joined(separator: "\n")
+    }
+
+    /// A provider message with a 5 s limit; nil when the extension doesn't answer.
+    private func ask(_ message: String) async -> String? {
+        guard let session = manager?.connection as? NETunnelProviderSession else { return nil }
+        return await withCheckedContinuation { (done: CheckedContinuation<String?, Never>) in
+            let once = Once()
+            let finish: (String?) -> Void = { text in
+                if once.first() { done.resume(returning: text) }
+            }
+            do {
+                try session.sendProviderMessage(Data(message.utf8)) { data in
+                    finish(data.map { String(decoding: $0, as: UTF8.self) })
+                }
+            } catch {
+                finish("сообщение не отправлено: \(error.localizedDescription)")
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 5) { finish(nil) }
+        }
+    }
+
     func clearLog() {
         SharedLog.clear()
         if !AppGroup.isShared { try? (manager?.connection as? NETunnelProviderSession)?.sendProviderMessage(Data("clear-log".utf8)) { _ in } }
@@ -172,6 +211,19 @@ final class VPNController: ObservableObject {
         try? await manager?.removeFromPreferences()
         manager = nil
         status = .invalid
+    }
+}
+
+/// True exactly once, from whichever thread asks first.
+private final class Once: @unchecked Sendable {
+    private let lock = NSLock()
+    private var used = false
+    func first() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if used { return false }
+        used = true
+        return true
     }
 }
 

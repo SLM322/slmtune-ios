@@ -50,6 +50,13 @@ enum CrashCapture {
         ticker = t
     }
 
+    /// The steps of the current run so far.
+    static func stagesNow() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return ((try? String(contentsOf: stageFile, encoding: .utf8)) ?? "(нет)").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// A normal end (stopped, or the start failed with an error the app is told about): nothing to report next time.
     static func finish() {
         ticker?.cancel()

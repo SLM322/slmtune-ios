@@ -49,6 +49,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             CrashCapture.running()
             completionHandler(nil)
         } catch {
+            let stages = CrashCapture.stagesNow()
             CrashCapture.finish()
             log.error("start failed: \(error.localizedDescription, privacy: .public)")
             SharedLog.append("error", error.localizedDescription)
@@ -59,7 +60,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             } else {
                 // The app can't read last-error.txt and iOS replaces our error with "internal error" (12):
                 // hand the text over the same way as a crash report.
-                holdForReport("Ошибка запуска: " + error.localizedDescription, completionHandler)
+                holdForReport("Ошибка запуска: " + error.localizedDescription + "\n\nЭтапы запуска:\n" + stages, completionHandler)
             }
         }
     }
@@ -108,12 +109,41 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             // Журнал without a shared App Group: "source\ttext" lines.
             let text = SharedLog.tail(maxBytes: 60_000).map { "\($0.source)\t\($0.text)" }.joined(separator: "\n")
             completionHandler?(Data(text.utf8))
+        case "diag":
+            completionHandler?(Data(diagnostics().utf8))
         case "clear-log":
             SharedLog.clear()
             completionHandler?(Data("ok".utf8))
         default:
             completionHandler?(nil)
         }
+    }
+
+    /// Everything the extension knows about itself, for "Собрать отчёт" in the app's settings (no passwords).
+    private func diagnostics() -> String {
+        let s = loadSettings()
+        let base = AppGroup.container.path
+        var out: [String] = []
+        if let crashReport {
+            out.append("Режим: ЗАГЛУШКА (настоящий туннель не поднят, расширение держит отчёт)")
+            out.append("Отчёт: " + crashReport)
+        } else {
+            out.append("Режим: ядро \(commandServer == nil ? "НЕ запущено" : "запущено")")
+        }
+        out.append("Сборка расширения: \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?")")
+        out.append("App Group в расширении: \(AppGroup.isShared ? "общий" : "нет")")
+        out.append("Папка: \(base.utf8.count) символов, сокет \(base.utf8.count + 13 > 103 ? "TCP 19091" : "unix")")
+        out.append("Свободно памяти: \(os_proc_available_memory() / 1_048_576) МБ")
+        out.append("Настройки: серверов \(s.servers.count), активный \(s.activeServer?.kind ?? "нет"), режим \(s.preset), источник \(AppGroup.isShared ? "файл" : (sentSettings != nil ? "сообщение" : "профиль VPN"))")
+        let lists = Lists.presetLists(s.preset)
+        out.append("Списки режима: \(lists.filter { Lists.has(Lists.ruleFile($0)) }.count) из \(lists.count)")
+        out.append("")
+        out.append("Этапы запуска:")
+        out.append(CrashCapture.stagesNow())
+        out.append("")
+        out.append("Журнал:")
+        out.append(SharedLog.tail(maxBytes: 40_000).suffix(250).map { "[\($0.source)] \($0.text)" }.joined(separator: "\n"))
+        return out.joined(separator: "\n")
     }
 
     override func sleep(completionHandler: @escaping () -> Void) {

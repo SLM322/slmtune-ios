@@ -7,6 +7,8 @@ struct SettingsView: View {
     @State private var newWifi = ""
     @State private var showConfig = false
     @State private var confirmRemove = false
+    @State private var report: String?
+    @State private var collecting = false
 
     var body: some View {
         SlmList {
@@ -98,8 +100,18 @@ struct SettingsView: View {
                 LabeledContent("Версия", value: Diagnostics.version)
                 LabeledContent("Ядра", value: Diagnostics.cores)
                 DisclosureGroup("Диагностика") {
-                    Text(verbatim: Diagnostics.text).font(.caption.monospaced()).textSelection(.enabled)
-                    ShareLink(item: Diagnostics.text) { Label("Поделиться", systemImage: "square.and.arrow.up") }
+                    Button(collecting ? "Собираю…" : "Собрать отчёт") {
+                        collecting = true
+                        Task {
+                            report = await vpn.diagnosticReport()
+                            collecting = false
+                        }
+                    }
+                    .disabled(collecting)
+                    if let report {
+                        ShareLink(item: report) { Label("Поделиться отчётом", systemImage: "square.and.arrow.up") }
+                    }
+                    Text(verbatim: report ?? Diagnostics.text).font(.caption.monospaced()).textSelection(.enabled)
                 }
                 Link("sing-box (GPL-3.0)", destination: URL(string: "https://github.com/SagerNet/sing-box")!)
             } header: {
