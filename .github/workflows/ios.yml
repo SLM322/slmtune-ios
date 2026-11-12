@@ -181,6 +181,7 @@ jobs:
           ls -la build/SLMtune-unsigned.ipa
 
       - uses: actions/upload-artifact@v4
+        continue-on-error: true  # the release below is what matters; the artifact store times out at times
         with:
           name: SLMtune-unsigned-ipa
           path: build/SLMtune-unsigned.ipa
@@ -374,6 +375,7 @@ jobs:
           echo "Сборка ${{ github.run_number }} загружена: через 5–15 минут она появится в TestFlight."
 
       - uses: actions/upload-artifact@v4
+        continue-on-error: true  # the release below is what matters; the artifact store times out at times
         if: always()
         with:
           name: archive-log
